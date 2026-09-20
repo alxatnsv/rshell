@@ -1,7 +1,9 @@
+use is_executable::IsExecutable;
 #[allow(unused_imports)]
 use std::io::{self, Write};
-use std::env;
-use is_executable::IsExecutable;
+use std::{
+    env, os::unix::process::CommandExt, path::PathBuf, process::Command,
+};
 
 #[derive(Debug)]
 struct Shell {
@@ -10,35 +12,56 @@ struct Shell {
 
 impl Shell {
     const BUILTINS: &[&str] = &["echo", "exit", "type"];
-
-    fn is_builtin(&self, cmd: &str) -> bool {
-        Self::BUILTINS.contains(&cmd)
-    }
-
+    
     fn echo(&self, args: &str) {
         println!("{args}");
     }
 
-    fn type_(&self, args: &str) {
-        if self.is_builtin(args) {
-            println!("{args} is a shell builtin");
+    fn type_(&self, command: &str) {
+        if self.is_builtin(command) {
+            println!("{command} is a shell builtin");
             return;
         }
 
-        let Some(path_var) = env::var_os("PATH") else {
-            println!("{args}: not found");
+        match Shell::locate_executable(command) {
+            Some(path) => println!("{command} is {}", path.display()),
+            None => println!("{command}: not found"),
+        }
+    }
+
+    fn execute(&self, command: &str, args: &str) {
+        let Some(path_buf) = Shell::locate_executable(command) else {
+            println!("{command}: not found");
             return;
         };
 
+        let status = Command::new(path_buf)
+            .arg0(command)
+            .args(args.split(" "))
+            .status();
+
+        if let Err(e) = status {
+            eprintln!("Failed to execute command: {e}");
+        }
+    }
+
+    fn locate_executable(command: &str) -> Option<PathBuf> {
+        let Some(path_var) = env::var_os("PATH") else {
+            return None;
+        };
+
         for dir in env::split_paths(&path_var) {
-            let candidate = dir.join(args);
+            let candidate = dir.join(command);
             if candidate.is_executable() {
-                println!("{args} is {}", candidate.display());
-                    return;
+                return Some(candidate);
             }
         }
 
-        println!("{args}: not found");
+        None
+    }
+
+    fn is_builtin(&self, cmd: &str) -> bool {
+        Self::BUILTINS.contains(&cmd)
     }
 
 }
@@ -65,9 +88,9 @@ fn main() {
         match command {
             "echo" => shell.echo(args),
             "type" => shell.type_(args),
-
             "exit" => break,
-            _ => println!("{}: command not found", command),
+
+            _ => shell.execute(command, args),
         }
     }
 }
