@@ -1,36 +1,73 @@
 #[allow(unused_imports)]
 use std::io::{self, Write};
+use std::env;
+use is_executable::IsExecutable;
 
-const BUILTINS: &[&str] = &["echo", "exit", "type"];
+#[derive(Debug)]
+struct Shell {
+    current_path: String,
+}
 
-fn is_builtin(cmd: &str) -> bool {
-    BUILTINS.contains(&cmd)
+impl Shell {
+    const BUILTINS: &[&str] = &["echo", "exit", "type"];
+
+    fn is_builtin(&self, cmd: &str) -> bool {
+        Self::BUILTINS.contains(&cmd)
+    }
+
+    fn echo(&self, args: &str) {
+        println!("{args}");
+    }
+
+    fn type_(&self, args: &str) {
+        if self.is_builtin(args) {
+            println!("{args} is a shell builtin");
+            return;
+        }
+
+        let Some(path_var) = env::var_os("PATH") else {
+            println!("{args}: not found");
+            return;
+        };
+
+        for dir in env::split_paths(&path_var) {
+            let candidate = dir.join(args);
+            if candidate.is_executable() {
+                println!("{args} is {}", candidate.display());
+                    return;
+            }
+        }
+
+        println!("{args}: not found");
+    }
+
 }
 
 fn main() {
-    loop {
+    let shell = Shell {
+        current_path: String::from(""),
+    };
 
+    loop {
         print!("$ ");
         io::stdout().flush().unwrap();
 
-        let mut command = String::new();
-        io::stdin().read_line(&mut command).unwrap();
-        let command = command.trim();
+        let mut line = String::new();
+        io::stdin().read_line(&mut line).unwrap();
+        let splitted: Vec<&str> = line.trim().split_whitespace().collect();
 
-        if command == "exit" {
-            break;
-        } else if command.starts_with("echo ") {
-            println!("{}", &command[5..]);
-        } else if command.starts_with("type "){
-            if is_builtin(&command[5..]) {
-                println!("{} is a shell builtin", &command[5..]);
-            }
-            else {
-                println!("{}: not found", &command[5..]);
-            }
-        } else {
-            println!("{}: command not found", command);
+        let Some(&command) = splitted.first() else {
+            continue;
+        };
+
+        let args = &splitted[1..].join(" ");
+
+        match command {
+            "echo" => shell.echo(args),
+            "type" => shell.type_(args),
+
+            "exit" => break,
+            _ => println!("{}: command not found", command),
         }
-
     }
 }
