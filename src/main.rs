@@ -1,44 +1,47 @@
 use is_executable::IsExecutable;
 #[allow(unused_imports)]
 use std::io::{self, Write};
-use std::{
-    env, os::unix::process::CommandExt, path::PathBuf, process::Command,
-};
+use std::{env, os::unix::process::CommandExt, path::PathBuf, process::Command};
 
 #[derive(Debug)]
 struct Shell {
-    current_path: String,
+    current_path: PathBuf,
 }
 
 impl Shell {
-    const BUILTINS: &[&str] = &["echo", "exit", "type"];
-    
-    fn echo(&self, args: &str) {
-        println!("{args}");
+    const BUILTINS: &[&str] = &["echo", "exit", "type", "pwd"];
+
+    fn echo(&self, args: &[&str]) {
+        println!("{}", args.join(" "));
     }
 
-    fn type_(&self, command: &str) {
-        if self.is_builtin(command) {
-            println!("{command} is a shell builtin");
+    fn type_(&self, args: &[&str]) {
+        let Some(&target) = args.first() else {
+            return;
+        };
+
+        if self.is_builtin(target) {
+            println!("{target} is a shell builtin");
             return;
         }
 
-        match Shell::locate_executable(command) {
-            Some(path) => println!("{command} is {}", path.display()),
-            None => println!("{command}: not found"),
+        match Shell::locate_executable(target) {
+            Some(path) => println!("{target} is {}", path.display()),
+            None => println!("{target}: not found"),
         }
     }
 
-    fn execute(&self, command: &str, args: &str) {
+    fn pwd(&self) {
+        println!("{}", self.current_path.display());
+    }
+
+    fn execute(&self, command: &str, args: &[&str]) {
         let Some(path_buf) = Shell::locate_executable(command) else {
             println!("{command}: not found");
             return;
         };
 
-        let status = Command::new(path_buf)
-            .arg0(command)
-            .args(args.split(" "))
-            .status();
+        let status = Command::new(path_buf).arg0(command).args(args).status();
 
         if let Err(e) = status {
             eprintln!("Failed to execute command: {e}");
@@ -52,7 +55,7 @@ impl Shell {
 
         for dir in env::split_paths(&path_var) {
             let candidate = dir.join(command);
-            if candidate.is_executable() {
+            if candidate.is_file() && candidate.is_executable() {
                 return Some(candidate);
             }
         }
@@ -63,12 +66,11 @@ impl Shell {
     fn is_builtin(&self, cmd: &str) -> bool {
         Self::BUILTINS.contains(&cmd)
     }
-
 }
 
 fn main() {
     let shell = Shell {
-        current_path: String::from(""),
+        current_path: env::current_dir().unwrap_or_default(),
     };
 
     loop {
@@ -83,11 +85,12 @@ fn main() {
             continue;
         };
 
-        let args = &splitted[1..].join(" ");
+        let args = &splitted[1..];
 
         match command {
             "echo" => shell.echo(args),
             "type" => shell.type_(args),
+            "pwd" => shell.pwd(),
             "exit" => break,
 
             _ => shell.execute(command, args),
