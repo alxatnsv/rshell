@@ -5,11 +5,11 @@ use std::{env, os::unix::process::CommandExt, path::PathBuf, process::Command};
 
 #[derive(Debug)]
 struct Shell {
-    current_path: PathBuf,
+    // current_path: PathBuf,
 }
 
 impl Shell {
-    const BUILTINS: &[&str] = &["echo", "exit", "type", "pwd"];
+    const BUILTINS: &[&str] = &["echo", "exit", "type", "pwd", "cd"];
 
     fn echo(&self, args: &[&str]) {
         println!("{}", args.join(" "));
@@ -32,7 +32,15 @@ impl Shell {
     }
 
     fn pwd(&self) {
-        println!("{}", self.current_path.display());
+        println!("{}", env::current_dir().unwrap_or_default().display());
+    }
+
+    fn cd(&self, args: &[&str]) {
+        let target = args.first().copied().unwrap_or("");
+
+        if let Err(_) = env::set_current_dir(target) {
+            println!("cd: {target}: No such file or directory");
+        }
     }
 
     fn execute(&self, command: &str, args: &[&str]) {
@@ -70,7 +78,7 @@ impl Shell {
 
 fn main() {
     let shell = Shell {
-        current_path: env::current_dir().unwrap_or_default(),
+        // current_path: env::current_dir().unwrap_or_default(),
     };
 
     loop {
@@ -90,6 +98,7 @@ fn main() {
         match command {
             "echo" => shell.echo(args),
             "type" => shell.type_(args),
+            "cd" => shell.cd(args),
             "pwd" => shell.pwd(),
             "exit" => break,
 
