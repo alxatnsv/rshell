@@ -1,7 +1,13 @@
 use is_executable::IsExecutable;
 #[allow(unused_imports)]
 use std::io::{self, Write};
-use std::{env, os::unix::process::CommandExt, path::PathBuf, process::Command};
+use std::{
+    env,
+    ffi::OsString,
+    os::unix::process::CommandExt,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 #[derive(Debug)]
 struct Shell {
@@ -36,10 +42,16 @@ impl Shell {
     }
 
     fn cd(&self, args: &[&str]) {
-        let target = args.first().copied().unwrap_or("");
+        let arg = args.first().copied().unwrap_or("");
 
-        if let Err(_) = env::set_current_dir(target) {
-            println!("cd: {target}: No such file or directory");
+        let home_path = if arg != "~" {
+            PathBuf::from(arg)
+        } else {
+            self.get_home_path()
+        };
+
+        if let Err(_) = env::set_current_dir(&home_path) {
+            println!("cd: {}: No such file or directory", home_path.display());
         }
     }
 
@@ -54,6 +66,14 @@ impl Shell {
         if let Err(e) = status {
             eprintln!("Failed to execute command: {e}");
         }
+    }
+
+    fn get_home_path(&self) -> PathBuf {
+        let Some(home) = env::var_os("HOME") else {
+            return PathBuf::new();
+        };
+
+        PathBuf::from(home)
     }
 
     fn locate_executable(command: &str) -> Option<PathBuf> {
