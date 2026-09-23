@@ -1,105 +1,13 @@
-use is_executable::IsExecutable;
+mod shell;
+
+use shell::Shell;
 #[allow(unused_imports)]
 use std::io::{self, Write};
-use std::{
-    env,
-    ffi::OsString,
-    os::unix::process::CommandExt,
-    path::{Path, PathBuf},
-    process::Command,
-};
 
-#[derive(Debug)]
-struct Shell {
-    // current_path: PathBuf,
-}
-
-impl Shell {
-    const BUILTINS: &[&str] = &["echo", "exit", "type", "pwd", "cd"];
-
-    fn echo(&self, args: &[&str]) {
-        println!("{}", args.join(" "));
-    }
-
-    fn type_(&self, args: &[&str]) {
-        let Some(&target) = args.first() else {
-            return;
-        };
-
-        if self.is_builtin(target) {
-            println!("{target} is a shell builtin");
-            return;
-        }
-
-        match Shell::locate_executable(target) {
-            Some(path) => println!("{target} is {}", path.display()),
-            None => println!("{target}: not found"),
-        }
-    }
-
-    fn pwd(&self) {
-        println!("{}", env::current_dir().unwrap_or_default().display());
-    }
-
-    fn cd(&self, args: &[&str]) {
-        let arg = args.first().copied().unwrap_or("");
-
-        let home_path = if arg != "~" {
-            PathBuf::from(arg)
-        } else {
-            self.get_home_path()
-        };
-
-        if let Err(_) = env::set_current_dir(&home_path) {
-            println!("cd: {}: No such file or directory", home_path.display());
-        }
-    }
-
-    fn execute(&self, command: &str, args: &[&str]) {
-        let Some(path_buf) = Shell::locate_executable(command) else {
-            println!("{command}: not found");
-            return;
-        };
-
-        let status = Command::new(path_buf).arg0(command).args(args).status();
-
-        if let Err(e) = status {
-            eprintln!("Failed to execute command: {e}");
-        }
-    }
-
-    fn get_home_path(&self) -> PathBuf {
-        let Some(home) = env::var_os("HOME") else {
-            return PathBuf::new();
-        };
-
-        PathBuf::from(home)
-    }
-
-    fn locate_executable(command: &str) -> Option<PathBuf> {
-        let Some(path_var) = env::var_os("PATH") else {
-            return None;
-        };
-
-        for dir in env::split_paths(&path_var) {
-            let candidate = dir.join(command);
-            if candidate.is_file() && candidate.is_executable() {
-                return Some(candidate);
-            }
-        }
-
-        None
-    }
-
-    fn is_builtin(&self, cmd: &str) -> bool {
-        Self::BUILTINS.contains(&cmd)
-    }
-}
+use crate::shell::IoContext;
 
 fn main() {
-    let shell = Shell {
-        // current_path: env::current_dir().unwrap_or_default(),
-    };
+    let shell = Shell {};
 
     loop {
         print!("$ ");
@@ -113,16 +21,16 @@ fn main() {
             continue;
         };
 
-        let args = &splitted[1..];
+        let (args, ctx) = IoContext::parse_context(&splitted[1..]);
 
         match command {
-            "echo" => shell.echo(args),
-            "type" => shell.type_(args),
-            "cd" => shell.cd(args),
-            "pwd" => shell.pwd(),
+            "echo" => shell.builtin_echo(&args, &ctx),
+            "type" => shell.builtin_type(&args, &ctx),
+            "cd" => shell.builtin_cd(&args, &ctx),
+            "pwd" => shell.builtin_pwd(&ctx),
             "exit" => break,
 
-            _ => shell.execute(command, args),
+            _ => shell.execute(command, &args, &ctx)
         }
     }
 }
