@@ -27,37 +27,27 @@ impl Shell {
 
         match Shell::locate_executable(target) {
             Some(path) => self.output(&ctx, &format!("{target} is {}", path.display())),
-            None => eprintln!("{target}: not found"),
+            None => self.error(&ctx, &format!("{target}: not found")),
         }
     }
 
     pub fn builtin_pwd(&self, ctx: &IoContext) {
-        self.output(
-            &ctx,
-            &format!("{}", env::current_dir().unwrap_or_default().display()),
-        );
+        self.output(&ctx, &format!("{}", env::current_dir().unwrap_or_default().display()));
     }
 
     pub fn builtin_cd(&self, args: &[&str], ctx: &IoContext) {
         let arg = args.first().copied().unwrap_or("");
 
-        let home_path = if arg != "~" {
-            PathBuf::from(arg)
-        } else {
-            self.get_home_path()
-        };
+        let home_path = if arg != "~" { PathBuf::from(arg) } else { self.get_home_path() };
 
         if let Err(_) = env::set_current_dir(&home_path) {
-            self.output(
-                &ctx,
-                &format!("cd: {}: No such file or directory", home_path.display()),
-            );
+            self.error(&ctx, &format!("cd: {}: No such file or directory", home_path.display()));
         }
     }
 
     pub fn execute(&self, command: &str, args: &[&str], ctx: &IoContext) {
         let Some(path_buf) = Shell::locate_executable(command) else {
-            self.output(&ctx, &format!("{command}: not found"));
+            self.error(&ctx, &format!("{command}: not found"));
             return;
         };
 
@@ -109,7 +99,25 @@ impl Shell {
     }
 
     fn output(&self, ctx: &IoContext, args: &str) {
+        if let Some(redirect_path) = &ctx.stderr_redirect {
+            let _ = File::create(redirect_path);
+        }
+
         if let Some(redirect_path) = &ctx.stdout_redirect {
+            if let Ok(mut f) = File::create(redirect_path) {
+                let _ = writeln!(f, "{args}");
+            }
+        } else {
+            println!("{args}");
+        }
+    }
+
+    fn error(&self, ctx: &IoContext, args: &str) {
+        if let Some(redirect_path) = &ctx.stdout_redirect {
+            let _ = File::create(redirect_path);
+        }
+
+        if let Some(redirect_path) = &ctx.stderr_redirect {
             if let Ok(mut f) = File::create(redirect_path) {
                 let _ = writeln!(f, "{args}");
             }
@@ -125,24 +133,34 @@ pub struct IoContext {
 }
 
 impl IoContext {
+    const REDIRECT_OPERATORS: &'static [&'static str] = &[">", "1>", "2>", ">>", "1>>", "2>>", "&>"];
+
     pub fn parse_context<'a>(args: &[&'a str]) -> (Vec<&'a str>, IoContext) {
-        if args.iter().any(|&x| x == ">" || x == "1>") {
-            let stdout_path = args.get(args.len() - 1).map(PathBuf::from);
-            (
-                args[..args.len() - 2].to_vec(),
-                IoContext {
-                    stdout_redirect: stdout_path,
-                    stderr_redirect: None,
-                },
-            )
-        } else {
-            (
-                args.to_vec(),
-                IoContext {
-                    stdout_redirect: None,
-                    stderr_redirect: None,
-                },
-            )
+        if let Some(op_pos) = args.iter().position(|&x| Self::is_redirect_op(x)) {
+            if op_pos + 1 < args.len() {
+                let redirect_op = args[op_pos];
+                let file_path = PathBuf::from(args[op_pos + 1]);
+
+                let (stdout_redirect, stderr_redirect) = match redirect_op {
+                    ">" | "1>" | ">>" | "1>>" => (Some(file_path), None),
+                    "2>" | "2>>" => (None, Some(file_path)),
+                    _ => (None, None),
+                };
+
+                return (args[..op_pos].to_vec(), IoContext { stdout_redirect, stderr_redirect });
+            }
         }
+
+        (
+            args.to_vec(),
+            IoContext {
+                stdout_redirect: None,
+                stderr_redirect: None,
+            },
+        )
+    }
+
+    fn is_redirect_op(s: &str) -> bool {
+        Self::REDIRECT_OPERATORS.contains(&s)
     }
 }
