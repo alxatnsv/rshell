@@ -1,7 +1,13 @@
 use is_executable::IsExecutable;
 #[allow(unused_imports)]
 use std::io::{self, Write};
-use std::{env, fs::File, os::unix::process::CommandExt, path::PathBuf, process::Command};
+use std::{
+    env,
+    fs::{File, OpenOptions},
+    os::unix::process::CommandExt,
+    path::PathBuf,
+    process::Command,
+};
 
 #[derive(Debug)]
 pub struct Shell {
@@ -55,13 +61,13 @@ impl Shell {
         cmd.arg0(command).args(args);
 
         if let Some(file_path) = &ctx.stdout_redirect {
-            if let Ok(file) = File::create(file_path) {
+            if let Ok(file) = self.open_or_create(&ctx, file_path) {
                 cmd.stdout(file);
             }
         }
 
         if let Some(file_path) = &ctx.stderr_redirect {
-            if let Ok(file) = File::create(file_path) {
+            if let Ok(file) = self.open_or_create(&ctx, file_path) {
                 cmd.stderr(file);
             }
         }
@@ -104,7 +110,7 @@ impl Shell {
         }
 
         if let Some(redirect_path) = &ctx.stdout_redirect {
-            if let Ok(mut f) = File::create(redirect_path) {
+            if let Ok(mut f) = self.open_or_create(&ctx, redirect_path) {
                 let _ = writeln!(f, "{args}");
             }
         } else {
@@ -118,11 +124,19 @@ impl Shell {
         }
 
         if let Some(redirect_path) = &ctx.stderr_redirect {
-            if let Ok(mut f) = File::create(redirect_path) {
+            if let Ok(mut f) = self.open_or_create(&ctx, redirect_path) {
                 let _ = writeln!(f, "{args}");
             }
         } else {
             println!("{args}");
+        }
+    }
+
+    fn open_or_create(&self, ctx: &IoContext, path: &PathBuf) -> Result<File, std::io::Error> {
+        if ctx.append {
+            OpenOptions::new().create(true).append(true).open(path)
+        } else {
+            File::create(path)
         }
     }
 }
@@ -130,6 +144,7 @@ impl Shell {
 pub struct IoContext {
     stdout_redirect: Option<PathBuf>,
     stderr_redirect: Option<PathBuf>,
+    append: bool,
 }
 
 impl IoContext {
@@ -147,7 +162,19 @@ impl IoContext {
                     _ => (None, None),
                 };
 
-                return (args[..op_pos].to_vec(), IoContext { stdout_redirect, stderr_redirect });
+                let append = match redirect_op {
+                    ">>" | "1>>" | "2>>" => true,
+                    _ => false,
+                };
+
+                return (
+                    args[..op_pos].to_vec(),
+                    IoContext {
+                        stdout_redirect,
+                        stderr_redirect,
+                        append,
+                    },
+                );
             }
         }
 
@@ -156,6 +183,7 @@ impl IoContext {
             IoContext {
                 stdout_redirect: None,
                 stderr_redirect: None,
+                append: false,
             },
         )
     }
