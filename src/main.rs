@@ -5,15 +5,16 @@ mod shell;
 use io_context::IoContext;
 use rustyline::{Config, DefaultEditor};
 use shell::Shell;
-use std::env;
+use std::io::Write;
+use std::{env, fs::File};
 
 fn main() {
     let shell = Shell::new();
 
     let config = Config::builder().history_ignore_dups(false).unwrap().build();
     let mut rl = DefaultEditor::with_config(config).unwrap();
-    if let Some(hist_var) = env::var_os("HISTFILE") {
-        let _ = rl.load_history(&hist_var);
+    if let Some(hist_env) = env::var_os("HISTFILE") {
+        let _ = rl.load_history(&hist_env);
     };
 
     loop {
@@ -35,9 +36,22 @@ fn main() {
             "cd" => shell.builtin_cd(&args, &ctx),
             "pwd" => shell.builtin_pwd(&ctx),
             "history" => shell.builtin_history(&args, &ctx, &mut rl),
-            "exit" => break,
+            "exit" => {
+                save_histfile_env(&rl);
+                break;
+            }
 
             _ => shell.execute(command, &args, &ctx),
         }
+    }
+}
+
+fn save_histfile_env(rl: &DefaultEditor) {
+    let Some(hist_env) = env::var_os("HISTFILE") else {
+        return;
+    };
+
+    if let Ok(mut f) = File::create(hist_env) {
+        rl.history().iter().for_each(|line| writeln!(f, "{}", line).unwrap());
     }
 }
