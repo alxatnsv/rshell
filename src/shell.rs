@@ -8,7 +8,7 @@ use std::{
     env,
     fs::{File, OpenOptions},
     os::unix::process::CommandExt,
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::Command,
 };
 
@@ -35,6 +35,11 @@ impl Shell {
             match action {
                 "-r" => {
                     let _ = rl.load_history(&file_path);
+                    return;
+                }
+                "-w" => {
+                    let mut f = File::create(file_path).unwrap();
+                    rl.history().iter().for_each(|line| writeln!(f, "{}", line).unwrap());
                     return;
                 }
                 _ => self.error(&ctx, &format!("{action}: invalid option")),
@@ -166,8 +171,4 @@ impl Shell {
             File::create(path)
         }
     }
-
-    // fn process_history_commands(&self, args: &[&str], rl: &mut DefaultEditor) {
-
-    // }
 }
