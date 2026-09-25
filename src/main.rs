@@ -1,13 +1,14 @@
 mod shell;
+mod io_context;
+mod history;
 
 use shell::Shell;
+use io_context::IoContext;
 #[allow(unused_imports)]
 use std::io::{self, Write};
 
-use crate::shell::IoContext;
-
 fn main() {
-    let shell = Shell {};
+    let mut shell = Shell::new();
 
     loop {
         print!("$ ");
@@ -21,6 +22,8 @@ fn main() {
             continue;
         };
 
+        shell.add_entry(&line.trim());
+
         let (args, ctx) = IoContext::parse_context(&splitted[1..]);
 
         match command {
@@ -28,6 +31,7 @@ fn main() {
             "type" => shell.builtin_type(&args, &ctx),
             "cd" => shell.builtin_cd(&args, &ctx),
             "pwd" => shell.builtin_pwd(&ctx),
+            "history" => shell.builtin_history(&args, &ctx),
             "exit" => break,
 
             _ => shell.execute(command, &args, &ctx)
