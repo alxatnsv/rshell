@@ -15,7 +15,7 @@ pub struct Shell {
 }
 
 impl Shell {
-    const BUILTINS: &[&str] = &["echo", "exit", "type", "pwd", "cd"];
+    const BUILTINS: &[&str] = &["echo", "exit", "type", "pwd", "cd", "history"];
 
     pub fn builtin_echo(&self, args: &[&str], ctx: &IoContext) {
         self.output(ctx, &args.join(" "));
@@ -148,7 +148,7 @@ pub struct IoContext {
 }
 
 impl IoContext {
-    const REDIRECT_OPERATORS: &'static [&'static str] = &[">", "1>", "2>", ">>", "1>>", "2>>", "&>"];
+    const REDIRECT_OPERATORS: &'static [&'static str] = &[">", "1>", "2>", ">>", "1>>", "2>>"];
 
     pub fn parse_context<'a>(args: &[&'a str]) -> (Vec<&'a str>, IoContext) {
         if let Some(op_pos) = args.iter().position(|&x| Self::is_redirect_op(x)) {
