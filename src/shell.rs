@@ -1,6 +1,6 @@
-use is_executable::IsExecutable;
-use crate::io_context::IoContext;
 use crate::history::History;
+use crate::io_context::IoContext;
+use is_executable::IsExecutable;
 
 #[allow(unused_imports)]
 use std::io::{self, Write};
@@ -18,9 +18,8 @@ pub struct Shell {
 }
 
 impl Shell {
-
     pub fn new() -> Self {
-        Self {history: History::new()}
+        Self { history: History::new() }
     }
 
     const BUILTINS: &[&str] = &["echo", "exit", "type", "pwd", "cd", "history"];
@@ -30,9 +29,21 @@ impl Shell {
     }
 
     pub fn builtin_history(&mut self, args: &[&str], ctx: &IoContext) {
-        for (i, entry) in self.history.entries.iter().enumerate() {
-            self.output(ctx, &format!("{:>5}  {}", i+1, entry));
+        let len = self.history.entries.len();
+        let mut limit = len;
+
+        if let Some(first_arg) = args.get(0) {
+            if let Ok(num) = first_arg.parse::<usize>() {
+                limit = num.min(self.history.entries.len());
+            }
         }
+
+        let start_idx = len - limit;
+
+        for (i, entry) in self.history.entries[start_idx..].iter().enumerate() {
+            self.output(ctx, &format!("{:>5}  {}", start_idx + i + 1, entry));
+        }
+
     }
 
     pub fn builtin_type(&self, args: &[&str], ctx: &IoContext) {
@@ -157,5 +168,4 @@ impl Shell {
     pub fn add_entry(&mut self, line: &str) {
         self.history.add_entry(line);
     }
-
 }
