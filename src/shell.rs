@@ -5,6 +5,7 @@ use rustyline::{DefaultEditor, history::History};
 #[allow(unused_imports)]
 use std::io::{self, Write};
 use std::{
+    cell::Cell,
     env,
     fs::{File, OpenOptions},
     os::unix::process::CommandExt,
@@ -13,9 +14,15 @@ use std::{
 };
 
 #[derive(Debug)]
-pub struct Shell {}
+pub struct Shell {
+    history_sync_idx: Cell<usize>,
+}
 
 impl Shell {
+    pub fn new() -> Self {
+        Shell { history_sync_idx: Cell::new(0) }
+    }
+
     const BUILTINS: &[&str] = &["echo", "exit", "type", "pwd", "cd", "history"];
 
     pub fn builtin_echo(&self, args: &[&str], ctx: &IoContext) {
@@ -32,18 +39,8 @@ impl Shell {
 
         if let Some(file_path) = args.get(1).map(PathBuf::from) {
             let action = args[0];
-            match action {
-                "-r" => {
-                    let _ = rl.load_history(&file_path);
-                    return;
-                }
-                "-w" => {
-                    let mut f = File::create(file_path).unwrap();
-                    rl.history().iter().for_each(|line| writeln!(f, "{}", line).unwrap());
-                    return;
-                }
-                _ => self.error(&ctx, &format!("{action}: invalid option")),
-            }
+            self.history_action(&action, &file_path, &ctx, rl);
+            return;
         }
 
         let start_idx = len - limit;
@@ -93,13 +90,13 @@ impl Shell {
         cmd.arg0(command).args(args);
 
         if let Some(file_path) = &ctx.stdout_redirect {
-            if let Ok(file) = self.open_or_create(&ctx, file_path) {
+            if let Ok(file) = self.open_or_create(ctx.append, file_path) {
                 cmd.stdout(file);
             }
         }
 
         if let Some(file_path) = &ctx.stderr_redirect {
-            if let Ok(file) = self.open_or_create(&ctx, file_path) {
+            if let Ok(file) = self.open_or_create(ctx.append, file_path) {
                 cmd.stderr(file);
             }
         }
@@ -142,7 +139,7 @@ impl Shell {
         }
 
         if let Some(redirect_path) = &ctx.stdout_redirect {
-            if let Ok(mut f) = self.open_or_create(&ctx, redirect_path) {
+            if let Ok(mut f) = self.open_or_create(ctx.append, redirect_path) {
                 let _ = writeln!(f, "{args}");
             }
         } else {
@@ -156,7 +153,7 @@ impl Shell {
         }
 
         if let Some(redirect_path) = &ctx.stderr_redirect {
-            if let Ok(mut f) = self.open_or_create(&ctx, redirect_path) {
+            if let Ok(mut f) = self.open_or_create(ctx.append, redirect_path) {
                 let _ = writeln!(f, "{args}");
             }
         } else {
@@ -164,11 +161,42 @@ impl Shell {
         }
     }
 
-    fn open_or_create(&self, ctx: &IoContext, path: &PathBuf) -> Result<File, std::io::Error> {
-        if ctx.append {
-            OpenOptions::new().create(true).append(true).open(path)
-        } else {
-            File::create(path)
+    fn open_or_create(&self, append: bool, path: &PathBuf) -> Result<File, std::io::Error> {
+        if append { OpenOptions::new().create(true).append(true).open(path) } else { File::create(path) }
+    }
+
+    fn history_action(&self, action: &str, file_path: &PathBuf, ctx: &IoContext, rl: &mut DefaultEditor) {
+        match action {
+            "-r" => {
+                let _ = rl.load_history(&file_path);
+                self.history_sync_idx.set(rl.history().len());
+                return;
+            }
+            "-w" => {
+                if let Ok(mut f) = self.open_or_create(false, &file_path) {
+                    rl.history().iter().for_each(|line| writeln!(f, "{}", line).unwrap());
+                }
+
+                self.history_sync_idx.set(rl.history().len());
+                return;
+            }
+            "-a" => {
+                let sync_idx = self.history_sync_idx.get();
+                if sync_idx < rl.history().len() {
+                    if let Ok(mut f) = self.open_or_create(true, &file_path) {
+                        for line in rl.history().iter().skip(sync_idx) {
+                            writeln!(f, "{}", line).unwrap();
+                        }
+                    }
+
+                    self.history_sync_idx.set(rl.history().len());
+                }
+                return;
+            }
+            _ => {
+                self.error(&ctx, &format!("{action}: invalid option"));
+                return;
+            }
         }
     }
 }

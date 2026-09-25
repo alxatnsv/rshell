@@ -7,7 +7,7 @@ use rustyline::{Config, DefaultEditor};
 use shell::Shell;
 
 fn main() {
-    let shell = Shell {};
+    let shell = Shell::new();
 
     let config = Config::builder().history_ignore_dups(false).unwrap().build();
     let mut rl = DefaultEditor::with_config(config).unwrap();

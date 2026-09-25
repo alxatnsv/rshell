@@ -1,5 +1,19 @@
-history
-echi
-echo
+1
+2
+3
+history 
+5
+6
 history
 history -w test.txt
+1
+2
+3
+history 
+5
+6
+history
+history -w test.txt
+9
+history
+history -a test.txt
