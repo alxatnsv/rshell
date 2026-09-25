@@ -1,6 +1,6 @@
-use crate::history::History;
 use crate::io_context::IoContext;
 use is_executable::IsExecutable;
+use rustyline::{DefaultEditor, history::History};
 
 #[allow(unused_imports)]
 use std::io::{self, Write};
@@ -13,37 +13,30 @@ use std::{
 };
 
 #[derive(Debug)]
-pub struct Shell {
-    history: History,
-}
+pub struct Shell {}
 
 impl Shell {
-    pub fn new() -> Self {
-        Self { history: History::new() }
-    }
-
     const BUILTINS: &[&str] = &["echo", "exit", "type", "pwd", "cd", "history"];
 
     pub fn builtin_echo(&self, args: &[&str], ctx: &IoContext) {
         self.output(ctx, &args.join(" "));
     }
 
-    pub fn builtin_history(&mut self, args: &[&str], ctx: &IoContext) {
-        let len = self.history.entries.len();
+    pub fn builtin_history(&self, args: &[&str], ctx: &IoContext, rl: &DefaultEditor) {
+        let len = rl.history().len();
         let mut limit = len;
 
         if let Some(first_arg) = args.get(0) {
             if let Ok(num) = first_arg.parse::<usize>() {
-                limit = num.min(self.history.entries.len());
+                limit = num.min(len);
             }
         }
 
         let start_idx = len - limit;
 
-        for (i, entry) in self.history.entries[start_idx..].iter().enumerate() {
+        for (i, entry) in rl.history().iter().skip(start_idx).enumerate() {
             self.output(ctx, &format!("{:>5}  {}", start_idx + i + 1, entry));
         }
-
     }
 
     pub fn builtin_type(&self, args: &[&str], ctx: &IoContext) {
@@ -163,9 +156,5 @@ impl Shell {
         } else {
             File::create(path)
         }
-    }
-
-    pub fn add_entry(&mut self, line: &str) {
-        self.history.add_entry(line);
     }
 }

@@ -1,29 +1,28 @@
-mod shell;
 mod io_context;
-mod history;
+mod shell;
 
-use shell::Shell;
-use io_context::IoContext;
 #[allow(unused_imports)]
-use std::io::{self, Write};
+use io_context::IoContext;
+use rustyline::{Config, DefaultEditor};
+use shell::Shell;
 
 fn main() {
-    let mut shell = Shell::new();
+    let shell = Shell {};
+
+    let config = Config::builder().history_ignore_dups(false).unwrap().build();
+    let mut rl = DefaultEditor::with_config(config).unwrap();
 
     loop {
-        print!("$ ");
-        io::stdout().flush().unwrap();
+        let Ok(line) = rl.readline("$ ") else {
+            continue;
+        };
 
-        let mut line = String::new();
-        io::stdin().read_line(&mut line).unwrap();
-        let splitted: Vec<&str> = line.trim().split_whitespace().collect();
-
+        let splitted: Vec<&str> = line.split_whitespace().collect();
         let Some(&command) = splitted.first() else {
             continue;
         };
 
-        shell.add_entry(&line.trim());
-
+        let _ = rl.add_history_entry(line.as_str());
         let (args, ctx) = IoContext::parse_context(&splitted[1..]);
 
         match command {
@@ -31,10 +30,10 @@ fn main() {
             "type" => shell.builtin_type(&args, &ctx),
             "cd" => shell.builtin_cd(&args, &ctx),
             "pwd" => shell.builtin_pwd(&ctx),
-            "history" => shell.builtin_history(&args, &ctx),
+            "history" => shell.builtin_history(&args, &ctx, &rl),
             "exit" => break,
 
-            _ => shell.execute(command, &args, &ctx)
+            _ => shell.execute(command, &args, &ctx),
         }
     }
 }

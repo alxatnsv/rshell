@@ -1,8 +1,6 @@
 #[allow(unused_imports)]
 use std::io::{self, Write};
-use std::
-    path::PathBuf
-;
+use std::path::PathBuf;
 pub struct IoContext {
     pub stdout_redirect: Option<PathBuf>,
     pub stderr_redirect: Option<PathBuf>,
