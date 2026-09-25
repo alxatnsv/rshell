@@ -30,7 +30,7 @@ fn main() {
             "type" => shell.builtin_type(&args, &ctx),
             "cd" => shell.builtin_cd(&args, &ctx),
             "pwd" => shell.builtin_pwd(&ctx),
-            "history" => shell.builtin_history(&args, &ctx, &rl),
+            "history" => shell.builtin_history(&args, &ctx, &mut rl),
             "exit" => break,
 
             _ => shell.execute(command, &args, &ctx),

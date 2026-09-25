@@ -8,7 +8,7 @@ use std::{
     env,
     fs::{File, OpenOptions},
     os::unix::process::CommandExt,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::Command,
 };
 
@@ -22,13 +22,22 @@ impl Shell {
         self.output(ctx, &args.join(" "));
     }
 
-    pub fn builtin_history(&self, args: &[&str], ctx: &IoContext, rl: &DefaultEditor) {
+    pub fn builtin_history(&self, args: &[&str], ctx: &IoContext, rl: &mut DefaultEditor) {
         let len = rl.history().len();
         let mut limit = len;
 
-        if let Some(first_arg) = args.get(0) {
-            if let Ok(num) = first_arg.parse::<usize>() {
-                limit = num.min(len);
+        if let Some(input_num) = args.get(0).and_then(|arg| arg.parse::<usize>().ok()) {
+            limit = input_num.min(len);
+        }
+
+        if let Some(file_path) = args.get(1).map(PathBuf::from) {
+            let action = args[0];
+            match action {
+                "-r" => {
+                    let _ = rl.load_history(&file_path);
+                    return;
+                }
+                _ => self.error(&ctx, &format!("{action}: invalid option")),
             }
         }
 
@@ -157,4 +166,8 @@ impl Shell {
             File::create(path)
         }
     }
+
+    // fn process_history_commands(&self, args: &[&str], rl: &mut DefaultEditor) {
+
+    // }
 }
