@@ -5,12 +5,16 @@ mod shell;
 use io_context::IoContext;
 use rustyline::{Config, DefaultEditor};
 use shell::Shell;
+use std::env;
 
 fn main() {
     let shell = Shell::new();
 
     let config = Config::builder().history_ignore_dups(false).unwrap().build();
     let mut rl = DefaultEditor::with_config(config).unwrap();
+    if let Some(hist_var) = env::var_os("HISTFILE") {
+        let _ = rl.load_history(&hist_var);
+    };
 
     loop {
         let Ok(line) = rl.readline("$ ") else {
