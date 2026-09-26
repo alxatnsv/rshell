@@ -71,6 +71,10 @@ impl Shell {
                 }
                 _ => {
                     if let Some((key, value)) = param.split_once("=") {
+                        let true = self.is_valid_var_identifier(key) else {
+                            self.error(&ctx, &format!("declare: `{key}={value}': not a valid identifier"));
+                            return;
+                        };
                         self.set_variable(key, value);
                     }
                 }
@@ -230,5 +234,13 @@ impl Shell {
 
     fn set_variable(&self, key: &str, value: &str) {
         self.variables.borrow_mut().insert(key.to_string(), value.to_string());
+    }
+
+    fn is_valid_var_identifier(&self, name: &str) -> bool {
+        let Some((&first, rest)) = name.as_bytes().split_first() else {
+            return false;
+        };
+
+        (first.is_ascii_alphabetic() || first == b'_') && rest.iter().all(|&b| b.is_ascii_alphanumeric() || b == b'_')
     }
 }
