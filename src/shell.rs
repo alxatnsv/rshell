@@ -53,7 +53,12 @@ impl Shell {
     pub fn builtin_declare(&self, args: &[&str], ctx: &IoContext) {
         if let Some(action) = args.get(0) {
             match action {
-                &"-p" => println!("declare: variable: not found"),
+                &"-p" => {
+                    if let Some(var) = args.get(1) {
+                        //todo
+                        self.error(&ctx, &format!("declare: {var}: not found"));
+                    }
+                },
                 _ => (),
             }
         }
