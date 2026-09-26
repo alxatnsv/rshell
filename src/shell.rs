@@ -6,6 +6,8 @@ use rustyline::{DefaultEditor, history::History};
 use std::io::{self, Write};
 use std::{
     cell::Cell,
+    cell::RefCell,
+    collections::HashMap,
     env,
     fs::{File, OpenOptions},
     os::unix::process::CommandExt,
@@ -16,11 +18,15 @@ use std::{
 #[derive(Debug)]
 pub struct Shell {
     history_sync_idx: Cell<usize>,
+    variables: RefCell<HashMap<String, String>>,
 }
 
 impl Shell {
     pub fn new() -> Self {
-        Shell { history_sync_idx: Cell::new(0) }
+        Shell {
+            history_sync_idx: Cell::new(0),
+            variables: RefCell::new(HashMap::new()),
+        }
     }
 
     const BUILTINS: &[&str] = &["echo", "exit", "type", "pwd", "cd", "history", "declare"];
@@ -51,15 +57,19 @@ impl Shell {
     }
 
     pub fn builtin_declare(&self, args: &[&str], ctx: &IoContext) {
-        if let Some(action) = args.get(0) {
-            match action {
+        if let Some(param) = args.get(0) {
+            match param {
                 &"-p" => {
                     if let Some(var) = args.get(1) {
                         //todo
                         self.error(&ctx, &format!("declare: {var}: not found"));
                     }
-                },
-                _ => (),
+                }
+                _ => {
+                    if let Some((key, value)) = param.split_once("=") {
+                        self.set_variable(key, value);
+                    }
+                }
             }
         }
     }
@@ -212,5 +222,9 @@ impl Shell {
                 return;
             }
         }
+    }
+
+    fn set_variable(&self, key: &str, value: &str) {
+        self.variables.borrow_mut().insert(key.to_string(), value.to_string());
     }
 }
