@@ -31,6 +31,30 @@ impl Shell {
 
     const BUILTINS: &[&str] = &["echo", "exit", "type", "pwd", "cd", "history", "declare"];
 
+    pub fn expand_variables(&self, args: &[&str]) -> Vec<String> {
+        let mut expanded = Vec::with_capacity(args.len());
+        let vars = self.variables.borrow();
+        for &arg in args {
+            if !arg.contains("$") {
+                expanded.push(arg.to_string());
+                continue;
+            }
+
+            let parts: Vec<&str> = arg.split('$').collect();
+            let mut res = String::new();
+
+            res.push_str(parts[0]);
+            for part in &parts[1..] {
+                if let Some(val) = vars.get(*part) {
+                    res.push_str(val);
+                }
+            }
+
+            expanded.push(res);
+        }
+        return expanded;
+    }
+
     pub fn builtin_echo(&self, args: &[&str], ctx: &IoContext) {
         self.output(ctx, &args.join(" "));
     }

@@ -27,8 +27,17 @@ fn main() {
             continue;
         };
 
+        let expanded_buf: Vec<String>;
+
         let _ = rl.add_history_entry(line.as_str());
         let (args, ctx) = IoContext::parse_context(&splitted[1..]);
+
+        let args: Vec<&str> = if args.iter().any(|arg| arg.contains('$')) {
+            expanded_buf = shell.expand_variables(&args);
+            expanded_buf.iter().map(|s| s.as_str()).collect()
+        } else {
+            args
+        };
 
         match command {
             "echo" => shell.builtin_echo(&args, &ctx),
