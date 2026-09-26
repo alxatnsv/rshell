@@ -60,9 +60,13 @@ impl Shell {
         if let Some(param) = args.get(0) {
             match param {
                 &"-p" => {
-                    if let Some(var) = args.get(1) {
-                        //todo
-                        self.error(&ctx, &format!("declare: {var}: not found"));
+                    if let Some(&key) = args.get(1) {
+                        let vars = self.variables.borrow();
+                        let Some(value) = vars.get(key) else {
+                            self.error(&ctx, &format!("declare: {key}: not found"));
+                            return;
+                        };
+                        self.output(&ctx, &format!("declare -- {key}=\"{value}\""));
                     }
                 }
                 _ => {
