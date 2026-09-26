@@ -23,7 +23,7 @@ impl Shell {
         Shell { history_sync_idx: Cell::new(0) }
     }
 
-    const BUILTINS: &[&str] = &["echo", "exit", "type", "pwd", "cd", "history"];
+    const BUILTINS: &[&str] = &["echo", "exit", "type", "pwd", "cd", "history", "declare"];
 
     pub fn builtin_echo(&self, args: &[&str], ctx: &IoContext) {
         self.output(ctx, &args.join(" "));
