@@ -50,6 +50,15 @@ impl Shell {
         }
     }
 
+    pub fn builtin_declare(&self, args: &[&str], ctx: &IoContext) {
+        if let Some(action) = args.get(0) {
+            match action {
+                &"-p" => println!("declare: variable: not found"),
+                _ => (),
+            }
+        }
+    }
+
     pub fn builtin_type(&self, args: &[&str], ctx: &IoContext) {
         let Some(&target) = args.first() else {
             return;
