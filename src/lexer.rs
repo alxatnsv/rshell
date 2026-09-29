@@ -70,7 +70,6 @@ impl<'a> Lexer<'a> {
                     self.state = State::Escape(EscapeContext::Normal);
                 }
                 '$' => {
-                    self.in_word = true;
                     self.state = State::SawDollar(EscapeContext::Normal);
                 }
                 _ => {
@@ -139,7 +138,11 @@ impl<'a> Lexer<'a> {
                     name.push(ch);
                     self.state = State::ReadingVar { return_to, name };
                 } else {
-                    self.expand_variable(&name);
+                    let val = self.expand_variable(&name);
+                    if !val.is_empty() {
+                        self.in_word = true;
+                        self.current_word.push_str(&val);
+                    }
                     self.state = Self::context_to_state(return_to);
                     self.step(ch);
                 }
@@ -147,7 +150,11 @@ impl<'a> Lexer<'a> {
 
             State::ReadingBracedVar { return_to, mut name } => {
                 if ch == '}' {
-                    self.expand_variable(&name);
+                    let val = self.expand_variable(&name);
+                    if !val.is_empty() {
+                        self.in_word = true;
+                        self.current_word.push_str(&val);
+                    }
                     self.state = Self::context_to_state(return_to);
                 } else {
                     name.push(ch);
@@ -157,10 +164,8 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn expand_variable(&mut self, name: &str) {
-        if let Some(val) = self.variables.get(name) {
-            self.current_word.push_str(val);
-        }
+    fn expand_variable(&self, name: &str) -> String {
+        if let Some(val) = self.variables.get(name) { val.clone() } else { String::new() }
     }
 
     fn context_to_state(ctx: EscapeContext) -> State {
@@ -190,12 +195,17 @@ impl<'a> Lexer<'a> {
                 Ok(self.tokens)
             }
             State::SawDollar(_) => {
+                self.in_word = true;
                 self.current_word.push('$');
                 self.flush_word();
                 Ok(self.tokens)
             }
             State::ReadingVar { name, .. } => {
-                self.expand_variable(&name);
+                let val = self.expand_variable(&name);
+                if !val.is_empty() {
+                    self.in_word = true;
+                    self.current_word.push_str(&val);
+                }
                 self.flush_word();
                 Ok(self.tokens)
             }
