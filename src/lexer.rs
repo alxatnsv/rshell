@@ -84,6 +84,7 @@ impl<'a> Lexer<'a> {
                 }
                 _ => {
                     self.current_word.push(ch);
+                    self.state = State::InSingleQuote;
                 }
             },
 
@@ -99,6 +100,7 @@ impl<'a> Lexer<'a> {
                 }
                 _ => {
                     self.current_word.push(ch);
+                    self.state = State::InDoubleQuote;
                 }
             },
 
@@ -138,7 +140,7 @@ impl<'a> Lexer<'a> {
                     name.push(ch);
                     self.state = State::ReadingVar { return_to, name };
                 } else {
-                    let val = self.expand_variable(&name);
+                    let val = self.get_variable(&name);
                     if !val.is_empty() {
                         self.in_word = true;
                         self.current_word.push_str(&val);
@@ -150,7 +152,7 @@ impl<'a> Lexer<'a> {
 
             State::ReadingBracedVar { return_to, mut name } => {
                 if ch == '}' {
-                    let val = self.expand_variable(&name);
+                    let val = self.get_variable(&name);
                     if !val.is_empty() {
                         self.in_word = true;
                         self.current_word.push_str(&val);
@@ -164,7 +166,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn expand_variable(&self, name: &str) -> String {
+    fn get_variable(&self, name: &str) -> String {
         if let Some(val) = self.variables.get(name) { val.clone() } else { String::new() }
     }
 
@@ -201,7 +203,7 @@ impl<'a> Lexer<'a> {
                 Ok(self.tokens)
             }
             State::ReadingVar { name, .. } => {
-                let val = self.expand_variable(&name);
+                let val = self.get_variable(&name);
                 if !val.is_empty() {
                     self.in_word = true;
                     self.current_word.push_str(&val);
