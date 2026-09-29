@@ -1,8 +1,10 @@
 mod io_context;
+mod lexer;
 mod shell;
 
 #[allow(unused_imports)]
 use io_context::IoContext;
+use lexer::Lexer;
 use rustyline::{Config, DefaultEditor};
 use shell::Shell;
 use std::io::Write;
@@ -22,22 +24,26 @@ fn main() {
             continue;
         };
 
-        let splitted: Vec<&str> = line.split_whitespace().collect();
-        let Some(&command) = splitted.first() else {
-            continue;
+        let tokens = {
+            let vars = shell.get_variables();
+            match Lexer::new(&vars).tokenize(&line) {
+                Ok(tokens) => tokens,
+                Err(e) => {
+                    eprintln!("syntax error: {:?}", e);
+                    continue;
+                }
+            }
         };
 
-        let expanded_buf: Vec<String>;
+        if tokens.is_empty() {
+            continue;
+        }
+
+        let token_refs: Vec<&str> = tokens.iter().map(|s| s.as_str()).collect();
+        let command = token_refs[0];
 
         let _ = rl.add_history_entry(line.as_str());
-        let (args, ctx) = IoContext::parse_context(&splitted[1..]);
-
-        let args: Vec<&str> = if args.iter().any(|arg| arg.contains('$')) {
-            expanded_buf = shell.expand_variables(&args);
-            expanded_buf.iter().map(|s| s.as_str()).collect()
-        } else {
-            args
-        };
+        let (args, ctx) = IoContext::parse_context(&&token_refs[1..]);
 
         match command {
             "echo" => shell.builtin_echo(&args, &ctx),

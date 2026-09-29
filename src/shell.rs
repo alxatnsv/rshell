@@ -5,8 +5,7 @@ use rustyline::{DefaultEditor, history::History};
 #[allow(unused_imports)]
 use std::io::{self, Write};
 use std::{
-    cell::Cell,
-    cell::RefCell,
+    cell::{Cell, Ref, RefCell},
     collections::HashMap,
     env,
     fs::{File, OpenOptions},
@@ -31,28 +30,8 @@ impl Shell {
 
     const BUILTINS: &[&str] = &["echo", "exit", "type", "pwd", "cd", "history", "declare"];
 
-    pub fn expand_variables(&self, args: &[&str]) -> Vec<String> {
-        let mut expanded = Vec::with_capacity(args.len());
-        let vars = self.variables.borrow();
-        for &arg in args {
-            if !arg.contains("$") {
-                expanded.push(arg.to_string());
-                continue;
-            }
-
-            let parts: Vec<&str> = arg.split('$').collect();
-            let mut res = String::new();
-
-            res.push_str(parts[0]);
-            for part in &parts[1..] {
-                if let Some(val) = vars.get(*part) {
-                    res.push_str(val);
-                }
-            }
-
-            expanded.push(res);
-        }
-        return expanded;
+    pub fn get_variables(&self) -> Ref<'_, HashMap<String, String>> {
+        self.variables.borrow()
     }
 
     pub fn builtin_echo(&self, args: &[&str], ctx: &IoContext) {
