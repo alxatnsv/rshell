@@ -6,15 +6,15 @@ pub enum EscapeContext {
     DoubleQuote,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum State {
     Normal,
     InSingleQuote,
     InDoubleQuote,
     Escape(EscapeContext),
     SawDollar(EscapeContext),
-    ReadingVar { return_to: EscapeContext, name: String },
-    ReadingBracedVar { return_to: EscapeContext, name: String },
+    ReadingVar(EscapeContext),
+    ReadingBracedVar(EscapeContext),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -28,6 +28,7 @@ pub struct Lexer<'a> {
     state: State,
     tokens: Vec<String>,
     current_word: String,
+    var_buffer: String,
     in_word: bool,
     variables: &'a HashMap<String, String>,
 }
@@ -38,6 +39,7 @@ impl<'a> Lexer<'a> {
             state: State::Normal,
             tokens: Vec::new(),
             current_word: String::new(),
+            var_buffer: String::new(),
             in_word: false,
             variables,
         }
@@ -52,7 +54,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn step(&mut self, ch: char) {
-        match mem::replace(&mut self.state, State::Normal) {
+        match self.state {
             State::Normal => match ch {
                 ' ' | '\t' | '\n' => {
                     self.flush_word();
@@ -84,7 +86,6 @@ impl<'a> Lexer<'a> {
                 }
                 _ => {
                     self.current_word.push(ch);
-                    self.state = State::InSingleQuote;
                 }
             },
 
@@ -100,7 +101,6 @@ impl<'a> Lexer<'a> {
                 }
                 _ => {
                     self.current_word.push(ch);
-                    self.state = State::InDoubleQuote;
                 }
             },
 
@@ -121,26 +121,27 @@ impl<'a> Lexer<'a> {
 
             State::SawDollar(return_to) => match ch {
                 '{' => {
-                    self.state = State::ReadingBracedVar { return_to, name: String::new() };
+                    self.var_buffer.clear();
+                    self.state = State::ReadingBracedVar(return_to);
                 }
                 'a'..='z' | 'A'..='Z' | '_' => {
-                    let mut name = String::new();
-                    name.push(ch);
-                    self.state = State::ReadingVar { return_to, name };
+                    self.var_buffer.clear();
+                    self.var_buffer.push(ch);
+                    self.state = State::ReadingVar(return_to);
                 }
                 _ => {
+                    self.in_word = true;
                     self.current_word.push('$');
                     self.state = Self::context_to_state(return_to);
                     self.step(ch);
                 }
             },
 
-            State::ReadingVar { return_to, mut name } => {
+            State::ReadingVar(return_to) => {
                 if ch.is_ascii_alphanumeric() || ch == '_' {
-                    name.push(ch);
-                    self.state = State::ReadingVar { return_to, name };
+                    self.var_buffer.push(ch);
                 } else {
-                    let val = self.get_variable(&name);
+                    let val = self.get_variable(&self.var_buffer);
                     if !val.is_empty() {
                         self.in_word = true;
                         self.current_word.push_str(&val);
@@ -150,17 +151,16 @@ impl<'a> Lexer<'a> {
                 }
             }
 
-            State::ReadingBracedVar { return_to, mut name } => {
+            State::ReadingBracedVar(return_to) => {
                 if ch == '}' {
-                    let val = self.get_variable(&name);
+                    let val = self.get_variable(&self.var_buffer);
                     if !val.is_empty() {
                         self.in_word = true;
                         self.current_word.push_str(&val);
                     }
                     self.state = Self::context_to_state(return_to);
                 } else {
-                    name.push(ch);
-                    self.state = State::ReadingBracedVar { return_to, name };
+                    self.var_buffer.push(ch);
                 }
             }
         }
@@ -189,9 +189,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn finish(mut self) -> Result<Vec<String>, LexError> {
-        let state = mem::replace(&mut self.state, State::Normal);
-
-        match state {
+        match self.state {
             State::Normal => {
                 self.flush_word();
                 Ok(self.tokens)
@@ -202,8 +200,8 @@ impl<'a> Lexer<'a> {
                 self.flush_word();
                 Ok(self.tokens)
             }
-            State::ReadingVar { name, .. } => {
-                let val = self.get_variable(&name);
+            State::ReadingVar(_) => {
+                let val = self.get_variable(&self.var_buffer);
                 if !val.is_empty() {
                     self.in_word = true;
                     self.current_word.push_str(&val);
@@ -214,7 +212,7 @@ impl<'a> Lexer<'a> {
             State::InSingleQuote => Err(LexError::UnclosedQuote('\'')),
             State::InDoubleQuote => Err(LexError::UnclosedQuote('"')),
             State::Escape(_) => Err(LexError::TrailingEscape),
-            State::ReadingBracedVar { .. } => Err(LexError::UnclosedBrace),
+            State::ReadingBracedVar(_) => Err(LexError::UnclosedBrace),
         }
     }
 }
