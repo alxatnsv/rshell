@@ -55,6 +55,7 @@ fn main() {
             "pwd" => shell.builtin_pwd(&ctx),
             "declare" => shell.builtin_declare(&args, &ctx),
             "history" => shell.builtin_history(&args, &ctx, &mut rl),
+            "complete" => shell.builtin_complete(&args, &ctx),
             "exit" => {
                 save_histfile_env(&rl);
                 break;

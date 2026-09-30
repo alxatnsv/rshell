@@ -1,6 +1,9 @@
 use crate::{helper::ShellHelper, io_context::IoContext};
 use is_executable::IsExecutable;
-use rustyline::{Editor, history::{DefaultHistory, History}};
+use rustyline::{
+    Editor,
+    history::{DefaultHistory, History},
+};
 
 #[allow(unused_imports)]
 use std::io::{self, Write};
@@ -38,6 +41,23 @@ impl Shell {
         self.output(ctx, &args.join(" "));
     }
 
+    pub fn builtin_complete(&self, args: &[&str], ctx: &IoContext) {
+        let Some(param) = args.get(0) else {
+            return;
+        };
+
+        match param {
+            &"-p" => {
+                if let Some(command) = args.get(1) {
+                    self.error(ctx, &format!("complete: {command}: no completion specification", ));
+                }
+            }
+            _ => {
+                
+            }
+        }
+    }
+
     pub fn builtin_history(&self, args: &[&str], ctx: &IoContext, rl: &mut Editor<ShellHelper, DefaultHistory>) {
         let len = rl.history().len();
         let mut limit = len;
@@ -60,26 +80,28 @@ impl Shell {
     }
 
     pub fn builtin_declare(&self, args: &[&str], ctx: &IoContext) {
-        if let Some(param) = args.get(0) {
-            match param {
-                &"-p" => {
-                    if let Some(&key) = args.get(1) {
-                        let vars = self.variables.borrow();
-                        let Some(value) = vars.get(key) else {
-                            self.error(&ctx, &format!("declare: {key}: not found"));
-                            return;
-                        };
-                        self.output(&ctx, &format!("declare -- {key}=\"{value}\""));
-                    }
+        let Some(param) = args.get(0) else {
+            return;
+        };
+
+        match param {
+            &"-p" => {
+                if let Some(&key) = args.get(1) {
+                    let vars = self.variables.borrow();
+                    let Some(value) = vars.get(key) else {
+                        self.error(&ctx, &format!("declare: {key}: not found"));
+                        return;
+                    };
+                    self.output(&ctx, &format!("declare -- {key}=\"{value}\""));
                 }
-                _ => {
-                    if let Some((key, value)) = param.split_once("=") {
-                        let true = self.is_valid_var_identifier(key) else {
-                            self.error(&ctx, &format!("declare: `{key}={value}': not a valid identifier"));
-                            return;
-                        };
-                        self.set_variable(key, value);
-                    }
+            }
+            _ => {
+                if let Some((key, value)) = param.split_once("=") {
+                    let true = self.is_valid_var_identifier(key) else {
+                        self.error(&ctx, &format!("declare: `{key}={value}': not a valid identifier"));
+                        return;
+                    };
+                    self.set_variable(key, value);
                 }
             }
         }
