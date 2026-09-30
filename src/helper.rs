@@ -39,82 +39,94 @@ impl Completer for ShellHelper {
         let mut candidates = Vec::new();
 
         if line_up_to_cursor[..start_pos].trim().is_empty() {
-            //TODO extract the following code into locate command method
-
-            for &builtin in Shell::BUILTINS {
-                if builtin.starts_with(&suggested_file) {
-                    candidates.push(Pair {
-                        display: builtin.to_string(),
-                        replacement: builtin.to_string() + " ",
-                    })
-                }
-            }
-
-            if let Some(path_var) = env::var_os("PATH") {
-                let mut commands = BTreeSet::<String>::new();
-
-                for path in env::split_paths(&path_var) {
-                    if let Ok(entries) = fs::read_dir(&path) {
-                        for entry in entries.flatten() {
-                            if let Some(file_name) = entry.file_name().to_str() {
-                                if !file_name.starts_with(&suggested_file) {
-                                    continue;
-                                }
-                                if entry.path().is_file() && entry.path().is_executable() {
-                                    commands.insert(file_name.to_string());
-                                }
-                            }
-                        }
-                    }
-                }
-
-                for name in commands {
-                    candidates.push(Pair {
-                        display: name.clone(),
-                        replacement: format!("{name} "),
-                    });
-                }
-            };
-        }
-
-        if let Ok(entries) = fs::read_dir(suggested_dir.unwrap_or(".")) {
-            //TODO extract to locate files and dirs method
-
-            let prefix = match suggested_dir {
-                Some(p) => format!("{}/", p),
-                None => String::new(),
-            };
-
-            for entry in entries.flatten() {
-                let Ok(file_type) = entry.file_type() else {
-                    continue;
-                };
-
-                if file_type.is_file()
-                    && let Some(file_name) = entry.file_name().to_str()
-                {
-                    if file_name.starts_with(&suggested_file) {
-                        candidates.push(Pair {
-                            display: prefix.to_string() + file_name,
-                            replacement: prefix.to_string() + file_name + " ",
-                        });
-                    }
-                } else if file_type.is_dir()
-                    && let Some(dir_name) = entry.file_name().to_str()
-                {
-                    if dir_name.starts_with(&suggested_file) {
-                        candidates.push(Pair {
-                            display: prefix.to_string() + dir_name + "/",
-                            replacement: prefix.to_string() + dir_name + "/",
-                        });
-                    }
-                }
-            }
+            collect_command_candidates(suggested_file, &mut candidates);
+        } else {
+            collect_path_candidates(suggested_dir, suggested_file, &mut candidates);
         }
 
         candidates.sort_by(|a, b| a.display.cmp(&b.display));
 
         Ok((start_pos, candidates))
+    }
+}
+
+fn collect_command_candidates(suggested_file: &str, candidates: &mut Vec<Pair>) {
+    for &builtin in Shell::BUILTINS {
+        if builtin.starts_with(&suggested_file) {
+            candidates.push(Pair {
+                display: builtin.to_string(),
+                replacement: builtin.to_string() + " ",
+            })
+        }
+    }
+
+    let Some(path_var) = env::var_os("PATH") else {
+        return;
+    };
+
+    let mut commands = BTreeSet::<String>::new();
+
+    for path in env::split_paths(&path_var) {
+        let Ok(entries) = fs::read_dir(&path) else {
+            continue;
+        };
+
+        for entry in entries.flatten() {
+            let os_file_name = entry.file_name();
+            let Some(file_name) = os_file_name.to_str() else {
+                continue;
+            };
+
+            if !file_name.starts_with(&suggested_file) {
+                continue;
+            }
+            let path_buf = entry.path();
+            if path_buf.is_file() && path_buf.is_executable() {
+                commands.insert(file_name.to_string());
+            }
+        }
+    }
+
+    for name in commands {
+        candidates.push(Pair {
+            display: name.clone(),
+            replacement: format!("{name} "),
+        });
+    }
+}
+
+fn collect_path_candidates(suggested_dir: Option<&str>, suggested_file: &str, candidates: &mut Vec<Pair>) {
+    if let Ok(entries) = fs::read_dir(suggested_dir.unwrap_or(".")) {
+        let prefix = match suggested_dir {
+            Some(p) => format!("{}/", p),
+            None => String::new(),
+        };
+
+        for entry in entries.flatten() {
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+
+            if file_type.is_file()
+                && let Some(file_name) = entry.file_name().to_str()
+            {
+                if file_name.starts_with(&suggested_file) {
+                    candidates.push(Pair {
+                        display: prefix.to_string() + file_name,
+                        replacement: prefix.to_string() + file_name + " ",
+                    });
+                }
+            } else if file_type.is_dir()
+                && let Some(dir_name) = entry.file_name().to_str()
+            {
+                if dir_name.starts_with(&suggested_file) {
+                    candidates.push(Pair {
+                        display: prefix.to_string() + dir_name + "/",
+                        replacement: prefix.to_string() + dir_name + "/",
+                    });
+                }
+            }
+        }
     }
 }
 
