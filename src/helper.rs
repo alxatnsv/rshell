@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, path::{self, Path}};
 
 use rustyline::{
     Context, Helper,
@@ -22,17 +22,32 @@ impl Completer for ShellHelper {
     fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
         let line_up_to_cursor = &line[..pos];
         let start_pos = line_up_to_cursor.rfind(' ').map(|i| i + 1).unwrap_or(0);
-        let word_to_complete = &line_up_to_cursor[start_pos..];
+        let path_to_complete = &line_up_to_cursor[start_pos..];
+
+        let mut directory = None;
+        let file: &str;
+        match path_to_complete.rsplit_once("/") {
+            Some((dir, f)) => {
+                directory = Some(dir);
+                file = f;
+            },
+            None => file = path_to_complete,
+        }
 
         let mut candidates = Vec::new();
 
-        if let Ok(entries) = fs::read_dir(".") {
+        if let Ok(entries) = fs::read_dir(directory.unwrap_or(".")) {
+            let prefix = match directory {
+                Some(p) => format!("{}/", p),
+                None => String::new(),
+            };
+
             for entry in entries.flatten() {
                 if let Some(file_name) = entry.file_name().to_str() {
-                    if file_name.starts_with(word_to_complete) {
+                    if file_name.starts_with(&file) {
                         candidates.push(Pair {
-                            display: file_name.to_string(),
-                            replacement: file_name.to_string() + " ",
+                            display: prefix.to_string() + file_name,
+                            replacement: prefix.to_string() + file_name + " ",
                         });
                     }
                 }
