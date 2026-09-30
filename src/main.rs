@@ -15,7 +15,7 @@ use std::{env, fs::File};
 fn main() {
     let shell = Shell::new();
 
-    let config = Config::builder().history_ignore_dups(false).unwrap().build();
+    let config = Config::builder().history_ignore_dups(false).unwrap().completion_type(rustyline::CompletionType::List).build();
     let mut rl = Editor::<ShellHelper, DefaultHistory>::with_config(config).unwrap();
     rl.set_helper(Some(ShellHelper::new()));
     if let Some(hist_env) = env::var_os("HISTFILE") {

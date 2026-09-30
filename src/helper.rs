@@ -1,5 +1,4 @@
-use std::{fs, path::{self, Path}};
-
+use std::fs;
 use rustyline::{
     Context, Helper,
     completion::{Completer, Pair},
@@ -43,11 +42,23 @@ impl Completer for ShellHelper {
             };
 
             for entry in entries.flatten() {
-                if let Some(file_name) = entry.file_name().to_str() {
+                let Ok(file_type) = entry.file_type() else {
+                    continue;
+                };
+
+                if file_type.is_file() && let Some(file_name) = entry.file_name().to_str() {
                     if file_name.starts_with(&file) {
                         candidates.push(Pair {
                             display: prefix.to_string() + file_name,
                             replacement: prefix.to_string() + file_name + " ",
+                        });
+                    }
+                }
+                else if file_type.is_dir() && let Some(dir_name) = entry.file_name().to_str() {
+                    if dir_name.starts_with(&file) {
+                        candidates.push(Pair {
+                            display: prefix.to_string() + dir_name, 
+                            replacement: prefix.to_string() + dir_name + "/",
                         });
                     }
                 }
