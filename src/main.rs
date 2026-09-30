@@ -7,7 +7,7 @@ mod shell;
 use helper::ShellHelper;
 use io_context::IoContext;
 use lexer::Lexer;
-use rustyline::{history::DefaultHistory, Config, Editor};
+use rustyline::{Config, Editor, history::DefaultHistory};
 use shell::Shell;
 use std::io::Write;
 use std::{env, fs::File};

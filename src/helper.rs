@@ -57,7 +57,7 @@ impl Completer for ShellHelper {
                 else if file_type.is_dir() && let Some(dir_name) = entry.file_name().to_str() {
                     if dir_name.starts_with(&file) {
                         candidates.push(Pair {
-                            display: prefix.to_string() + dir_name, 
+                            display: prefix.to_string() + dir_name + "/", 
                             replacement: prefix.to_string() + dir_name + "/",
                         });
                     }
