@@ -28,7 +28,7 @@ impl Shell {
         }
     }
 
-    const BUILTINS: &[&str] = &["echo", "exit", "type", "pwd", "cd", "history", "declare"];
+    pub const BUILTINS: &[&str] = &["echo", "exit", "type", "pwd", "cd", "history", "declare"];
 
     pub fn get_variables(&self) -> Ref<'_, HashMap<String, String>> {
         self.variables.borrow()

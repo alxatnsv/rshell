@@ -1,4 +1,3 @@
-use std::fs;
 use rustyline::{
     Context, Helper,
     completion::{Completer, Pair},
@@ -6,6 +5,9 @@ use rustyline::{
     hint::Hinter,
     validate::Validator,
 };
+use std::fs;
+
+use crate::shell::Shell;
 
 pub struct ShellHelper {}
 
@@ -21,7 +23,7 @@ impl Completer for ShellHelper {
     fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
         let line_up_to_cursor = &line[..pos];
         let start_pos = line_up_to_cursor.rfind(' ').map(|i| i + 1).unwrap_or(0);
-        let path_to_complete = &line_up_to_cursor[start_pos..];
+        let path_to_complete = &line_up_to_cursor   [start_pos..];
 
         let mut directory = None;
         let file: &str;
@@ -29,11 +31,22 @@ impl Completer for ShellHelper {
             Some((dir, f)) => {
                 directory = Some(dir);
                 file = f;
-            },
+            }
             None => file = path_to_complete,
         }
 
         let mut candidates = Vec::new();
+
+        if line_up_to_cursor[..start_pos].trim().is_empty() {
+            for &builtin in Shell::BUILTINS {
+                if builtin.starts_with(&file) {
+                    candidates.push(Pair {
+                        display: builtin.to_string(),
+                        replacement: builtin.to_string() + " ",
+                    })
+                }
+            }
+        }
 
         if let Ok(entries) = fs::read_dir(directory.unwrap_or(".")) {
             let prefix = match directory {
@@ -46,18 +59,21 @@ impl Completer for ShellHelper {
                     continue;
                 };
 
-                if file_type.is_file() && let Some(file_name) = entry.file_name().to_str() {
+                if file_type.is_file()
+                    && let Some(file_name) = entry.file_name().to_str()
+                {
                     if file_name.starts_with(&file) {
                         candidates.push(Pair {
                             display: prefix.to_string() + file_name,
                             replacement: prefix.to_string() + file_name + " ",
                         });
                     }
-                }
-                else if file_type.is_dir() && let Some(dir_name) = entry.file_name().to_str() {
+                } else if file_type.is_dir()
+                    && let Some(dir_name) = entry.file_name().to_str()
+                {
                     if dir_name.starts_with(&file) {
                         candidates.push(Pair {
-                            display: prefix.to_string() + dir_name + "/", 
+                            display: prefix.to_string() + dir_name + "/",
                             replacement: prefix.to_string() + dir_name + "/",
                         });
                     }
