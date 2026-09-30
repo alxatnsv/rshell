@@ -21,6 +21,7 @@ use std::{
 pub struct Shell {
     history_sync_idx: Cell<usize>,
     variables: RefCell<HashMap<String, String>>,
+    completions: RefCell<HashMap<String,String>>,
 }
 
 impl Shell {
@@ -28,6 +29,7 @@ impl Shell {
         Shell {
             history_sync_idx: Cell::new(0),
             variables: RefCell::new(HashMap::new()),
+            completions: RefCell::new(HashMap::new()),
         }
     }
 
@@ -48,12 +50,21 @@ impl Shell {
 
         match param {
             &"-p" => {
-                if let Some(command) = args.get(1) {
-                    self.error(ctx, &format!("complete: {command}: no completion specification", ));
+                if let Some(&cmd) = args.get(1) {
+                    let compls = self.completions.borrow();
+                    let Some(path) = compls.get(cmd) else {
+                        self.error(ctx, &format!("complete: {cmd}: no completion specification", ));
+                        return;
+                    };
+                    self.output(ctx, &format!("complete -C '{path}' {cmd}"));
+                }
+            }
+            &"-C" => {
+                if let (Some(path), Some(cmd)) = (args.get(1), args.get(2)) {                
+                    self.set_completion(cmd, path);
                 }
             }
             _ => {
-                
             }
         }
     }
@@ -259,6 +270,10 @@ impl Shell {
 
     fn set_variable(&self, key: &str, value: &str) {
         self.variables.borrow_mut().insert(key.to_string(), value.to_string());
+    }
+
+    fn set_completion(&self, cmd: &str, path: &str){
+        self.completions.borrow_mut().insert(cmd.to_string(), path.to_string());
     }
 
     fn is_valid_var_identifier(&self, name: &str) -> bool {
