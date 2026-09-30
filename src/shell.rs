@@ -1,6 +1,6 @@
-use crate::io_context::IoContext;
+use crate::{helper::ShellHelper, io_context::IoContext};
 use is_executable::IsExecutable;
-use rustyline::{DefaultEditor, history::History};
+use rustyline::{Editor, history::{DefaultHistory, History}};
 
 #[allow(unused_imports)]
 use std::io::{self, Write};
@@ -38,7 +38,7 @@ impl Shell {
         self.output(ctx, &args.join(" "));
     }
 
-    pub fn builtin_history(&self, args: &[&str], ctx: &IoContext, rl: &mut DefaultEditor) {
+    pub fn builtin_history(&self, args: &[&str], ctx: &IoContext, rl: &mut Editor<ShellHelper, DefaultHistory>) {
         let len = rl.history().len();
         let mut limit = len;
 
@@ -200,7 +200,7 @@ impl Shell {
         if append { OpenOptions::new().create(true).append(true).open(path) } else { File::create(path) }
     }
 
-    fn history_action(&self, action: &str, file_path: &PathBuf, ctx: &IoContext, rl: &mut DefaultEditor) {
+    fn history_action(&self, action: &str, file_path: &PathBuf, ctx: &IoContext, rl: &mut Editor<ShellHelper, DefaultHistory>) {
         match action {
             "-r" => {
                 let _ = rl.load_history(&file_path);

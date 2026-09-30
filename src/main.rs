@@ -1,11 +1,13 @@
+mod helper;
 mod io_context;
 mod lexer;
 mod shell;
 
 #[allow(unused_imports)]
+use helper::ShellHelper;
 use io_context::IoContext;
 use lexer::Lexer;
-use rustyline::{Config, DefaultEditor};
+use rustyline::{history::DefaultHistory, Config, Editor};
 use shell::Shell;
 use std::io::Write;
 use std::{env, fs::File};
@@ -14,7 +16,8 @@ fn main() {
     let shell = Shell::new();
 
     let config = Config::builder().history_ignore_dups(false).unwrap().build();
-    let mut rl = DefaultEditor::with_config(config).unwrap();
+    let mut rl = Editor::<ShellHelper, DefaultHistory>::with_config(config).unwrap();
+    rl.set_helper(Some(ShellHelper::new()));
     if let Some(hist_env) = env::var_os("HISTFILE") {
         let _ = rl.load_history(&hist_env);
     };
@@ -62,7 +65,7 @@ fn main() {
     }
 }
 
-fn save_histfile_env(rl: &DefaultEditor) {
+fn save_histfile_env(rl: &Editor<ShellHelper, DefaultHistory>) {
     let Some(hist_env) = env::var_os("HISTFILE") else {
         return;
     };
