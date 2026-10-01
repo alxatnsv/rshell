@@ -17,7 +17,8 @@ fn main() {
 
     let config = Config::builder().history_ignore_dups(false).unwrap().completion_type(rustyline::CompletionType::List).build();
     let mut rl = Editor::<ShellHelper, DefaultHistory>::with_config(config).unwrap();
-    rl.set_helper(Some(ShellHelper::new()));
+    let helper = ShellHelper::new();
+    rl.set_helper(Some(helper));
     if let Some(hist_env) = env::var_os("HISTFILE") {
         let _ = rl.load_history(&hist_env);
     };
@@ -55,7 +56,11 @@ fn main() {
             "pwd" => shell.builtin_pwd(&ctx),
             "declare" => shell.builtin_declare(&args, &ctx),
             "history" => shell.builtin_history(&args, &ctx, &mut rl),
-            "complete" => shell.builtin_complete(&args, &ctx),
+            "complete" => {
+                if let Some(helper_ref) = rl.helper() {
+                    shell.builtin_complete(&args, &ctx, helper_ref);
+                }
+            }
             "exit" => {
                 save_histfile_env(&rl);
                 break;

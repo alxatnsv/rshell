@@ -21,7 +21,6 @@ use std::{
 pub struct Shell {
     history_sync_idx: Cell<usize>,
     variables: RefCell<HashMap<String, String>>,
-    completions: RefCell<HashMap<String,String>>,
 }
 
 impl Shell {
@@ -29,7 +28,6 @@ impl Shell {
         Shell {
             history_sync_idx: Cell::new(0),
             variables: RefCell::new(HashMap::new()),
-            completions: RefCell::new(HashMap::new()),
         }
     }
 
@@ -43,29 +41,28 @@ impl Shell {
         self.output(ctx, &args.join(" "));
     }
 
-    pub fn builtin_complete(&self, args: &[&str], ctx: &IoContext) {
+    pub fn builtin_complete(&self, args: &[&str], ctx: &IoContext, helper: &ShellHelper) {
         let Some(param) = args.get(0) else {
             return;
         };
 
         match param {
             &"-p" => {
-                if let Some(&cmd) = args.get(1) {
-                    let compls = self.completions.borrow();
-                    let Some(path) = compls.get(cmd) else {
-                        self.error(ctx, &format!("complete: {cmd}: no completion specification", ));
+                if let Some(cmd) = args.get(1) {
+                    let compls = helper.get_completion_spec();
+                    let Some(path) = compls.get(*cmd) else {
+                        self.error(ctx, &format!("complete: {cmd}: no completion specification",));
                         return;
                     };
                     self.output(ctx, &format!("complete -C '{path}' {cmd}"));
                 }
             }
             &"-C" => {
-                if let (Some(path), Some(cmd)) = (args.get(1), args.get(2)) {                
-                    self.set_completion(cmd, path);
+                if let (Some(path), Some(cmd)) = (args.get(1), args.get(2)) {
+                    helper.set_completion_spec(cmd, path);   
                 }
             }
-            _ => {
-            }
+            _ => {}
         }
     }
 
@@ -97,9 +94,9 @@ impl Shell {
 
         match param {
             &"-p" => {
-                if let Some(&key) = args.get(1) {
+                if let Some(key) = args.get(1) {
                     let vars = self.variables.borrow();
-                    let Some(value) = vars.get(key) else {
+                    let Some(value) = vars.get(*key) else {
                         self.error(&ctx, &format!("declare: {key}: not found"));
                         return;
                     };
@@ -270,10 +267,6 @@ impl Shell {
 
     fn set_variable(&self, key: &str, value: &str) {
         self.variables.borrow_mut().insert(key.to_string(), value.to_string());
-    }
-
-    fn set_completion(&self, cmd: &str, path: &str){
-        self.completions.borrow_mut().insert(cmd.to_string(), path.to_string());
     }
 
     fn is_valid_var_identifier(&self, name: &str) -> bool {

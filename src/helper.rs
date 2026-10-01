@@ -6,15 +6,32 @@ use rustyline::{
     hint::Hinter,
     validate::Validator,
 };
-use std::{collections::BTreeSet, env, fs};
+use std::{
+    cell::{Ref, RefCell},
+    collections::{BTreeSet, HashMap},
+    env, fs,
+    process::Command,
+};
 
 use crate::shell::Shell;
 
-pub struct ShellHelper {}
+pub struct ShellHelper {
+    completion_specs: RefCell<HashMap<String, String>>,
+}
 
 impl ShellHelper {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            completion_specs: RefCell::new(HashMap::new()),
+        }
+    }
+
+    pub fn get_completion_spec(&self) -> Ref<'_, HashMap<String, String>> {
+        self.completion_specs.borrow()
+    }
+
+    pub fn set_completion_spec(&self, cmd: &str, path: &str) {
+        self.completion_specs.borrow_mut().insert(cmd.to_string(), path.to_string());
     }
 }
 
@@ -38,10 +55,22 @@ impl Completer for ShellHelper {
 
         let mut candidates = Vec::new();
 
-        if line_up_to_cursor[..start_pos].trim().is_empty() {
+        let ends_with_space = line_up_to_cursor.ends_with(char::is_whitespace);
+        let words: Vec<&str> = line_up_to_cursor.split_whitespace().collect();
+        let is_command_position = words.len() <= 1 && !ends_with_space;
+
+        if is_command_position {
             collect_command_candidates(suggested_file, &mut candidates);
         } else {
-            collect_path_candidates(suggested_dir, suggested_file, &mut candidates);
+            let Some(command) = words.get(0) else {
+                return Ok((start_pos, candidates));
+            };
+
+            if let Some(script_path) = self.completion_specs.borrow().get(*command) {
+                collect_completion_spec_candidates(script_path, suggested_file, &mut candidates);
+            } else {
+                collect_path_candidates(suggested_dir, suggested_file, &mut candidates);
+            }
         }
 
         candidates.sort_by(|a, b| a.display.cmp(&b.display));
@@ -52,7 +81,7 @@ impl Completer for ShellHelper {
 
 fn collect_command_candidates(suggested_file: &str, candidates: &mut Vec<Pair>) {
     for &builtin in Shell::BUILTINS {
-        if builtin.starts_with(&suggested_file) {
+        if builtin.starts_with(suggested_file) {
             candidates.push(Pair {
                 display: builtin.to_string(),
                 replacement: builtin.to_string() + " ",
@@ -95,6 +124,22 @@ fn collect_command_candidates(suggested_file: &str, candidates: &mut Vec<Pair>) 
     }
 }
 
+fn collect_completion_spec_candidates(script_path: &str, suggested_arg: &str, candidates: &mut Vec<Pair>) {
+    let Ok(output) = Command::new(script_path).output() else {
+        return;
+    };
+    let text = String::from_utf8_lossy(&output.stdout);
+
+    for line in text.lines() {
+        if line.starts_with(suggested_arg) {
+            candidates.push(Pair {
+                display: line.to_string(),
+                replacement: line.to_string() + " ",
+            });
+        }
+    }
+}
+
 fn collect_path_candidates(suggested_dir: Option<&str>, suggested_file: &str, candidates: &mut Vec<Pair>) {
     if let Ok(entries) = fs::read_dir(suggested_dir.unwrap_or(".")) {
         let prefix = match suggested_dir {
@@ -110,7 +155,7 @@ fn collect_path_candidates(suggested_dir: Option<&str>, suggested_file: &str, ca
             if file_type.is_file()
                 && let Some(file_name) = entry.file_name().to_str()
             {
-                if file_name.starts_with(&suggested_file) {
+                if file_name.starts_with(suggested_file) {
                     candidates.push(Pair {
                         display: prefix.to_string() + file_name,
                         replacement: prefix.to_string() + file_name + " ",
@@ -119,7 +164,7 @@ fn collect_path_candidates(suggested_dir: Option<&str>, suggested_file: &str, ca
             } else if file_type.is_dir()
                 && let Some(dir_name) = entry.file_name().to_str()
             {
-                if dir_name.starts_with(&suggested_file) {
+                if dir_name.starts_with(suggested_file) {
                     candidates.push(Pair {
                         display: prefix.to_string() + dir_name + "/",
                         replacement: prefix.to_string() + dir_name + "/",
