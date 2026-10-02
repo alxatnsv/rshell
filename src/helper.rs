@@ -34,6 +34,10 @@ impl ShellHelper {
     pub fn set_completion_spec(&self, cmd: &str, path: &str) {
         self.completion_specs.borrow_mut().insert(cmd.to_string(), path.to_string());
     }
+
+    pub fn remove_completion_spec(&self, cmd: &str) {
+        self.completion_specs.borrow_mut().remove(cmd);
+    }
 }
 
 impl Completer for ShellHelper {

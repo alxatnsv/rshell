@@ -59,7 +59,12 @@ impl Shell {
             }
             &"-C" => {
                 if let (Some(path), Some(cmd)) = (args.get(1), args.get(2)) {
-                    helper.set_completion_spec(cmd, path);   
+                    helper.set_completion_spec(cmd, path);
+                }
+            }
+            &"-r" => {
+                if let Some(cmd) = args.get(1) {
+                    helper.remove_completion_spec(cmd);
                 }
             }
             _ => {}
