@@ -13,6 +13,7 @@ use std::{
     process::Command,
 };
 
+use crate::completion_context::CompletionContext;
 use crate::shell::Shell;
 
 pub struct ShellHelper {
@@ -38,53 +39,24 @@ impl ShellHelper {
 impl Completer for ShellHelper {
     type Candidate = Pair;
 
-    fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
-        let line_up_to_cursor = &line[..pos];
-        let start_pos = line_up_to_cursor.rfind(' ').map(|i| i + 1).unwrap_or(0);
-        let path_to_complete = &line_up_to_cursor[start_pos..];
-
-        let mut suggested_dir = None;
-        let suggested_file: &str;
-        match path_to_complete.rsplit_once("/") {
-            Some((dir, f)) => {
-                suggested_dir = Some(dir);
-                suggested_file = f;
-            }
-            None => suggested_file = path_to_complete,
-        }
-
+    fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> rustyline::Result<(usize, Vec<Pair>)> {
+        let ctx = CompletionContext::parse(line, pos);
         let mut candidates = Vec::new();
 
-        let ends_with_space = line_up_to_cursor.ends_with(char::is_whitespace);
-        let words: Vec<&str> = line_up_to_cursor.split_whitespace().collect();
+        let Some(command) = ctx.command() else {
+            return Ok((ctx.start_pos, candidates));
+        };
 
-        if words.is_empty() {
-            return Ok((start_pos, candidates));
-        }
-
-        let is_command_position = words.len() <= 1 && !ends_with_space;
-
-        if is_command_position {
-            collect_command_candidates(suggested_file, &mut candidates);
+        if ctx.is_command_position() {
+            collect_command_candidates(ctx.file, &mut candidates);
+        } else if let Some(script_path) = self.completion_specs.borrow().get(command) {
+            collect_completion_spec_candidates(script_path, &ctx, &mut candidates);
         } else {
-            let command = words[0];
-
-            if let Some(script_path) = self.completion_specs.borrow().get(command) {
-                let previous_word: Option<&str>;
-                match words.len() {
-                    3 => previous_word = Some(words[1]),
-                    _ => previous_word = None,
-                }
-
-                collect_completion_spec_candidates(command, script_path, suggested_file, &mut candidates, previous_word);
-            } else {
-                collect_path_candidates(suggested_dir, suggested_file, &mut candidates);
-            }
+            collect_path_candidates(ctx.dir, ctx.file, &mut candidates);
         }
 
         candidates.sort_by(|a, b| a.display.cmp(&b.display));
-
-        Ok((start_pos, candidates))
+        Ok((ctx.start_pos, candidates))
     }
 }
 
@@ -133,23 +105,24 @@ fn collect_command_candidates(suggested_file: &str, candidates: &mut Vec<Pair>) 
     }
 }
 
-fn collect_completion_spec_candidates(command: &str, script_path: &str, suggested_arg: &str, candidates: &mut Vec<Pair>, previous_word: Option<&str>) {
-    let mut cmd = Command::new(script_path);
-    let cmd_args = vec![command, suggested_arg, previous_word.unwrap_or("")];
-    cmd.args(cmd_args);
+fn collect_completion_spec_candidates(script_path: &str, ctx: &CompletionContext, candidates: &mut Vec<Pair>) {
+    let Some(command) = ctx.command() else { return };
 
-    let Ok(output) = cmd.output() else {
+    let Ok(output) = Command::new(script_path)
+        .args([command, ctx.current_word, ctx.previous_word().unwrap_or("")])
+        .env("COMP_LINE", ctx.line)
+        .env("COMP_POINT", ctx.pos.to_string())
+        .output()
+    else {
         return;
     };
-    let text = String::from_utf8_lossy(&output.stdout);
 
-    for line in text.lines() {
-        if line.starts_with(suggested_arg) {
-            candidates.push(Pair {
-                display: line.to_string(),
-                replacement: line.to_string() + " ",
-            });
-        }
+    let text = String::from_utf8_lossy(&output.stdout);
+    for line in text.lines().filter(|l| l.starts_with(ctx.current_word)) {
+        candidates.push(Pair {
+            display: line.to_string(),
+            replacement: format!("{line} "),
+        });
     }
 }
 

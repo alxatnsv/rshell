@@ -1,3 +1,4 @@
+mod completion_context;
 mod helper;
 mod io_context;
 mod lexer;
