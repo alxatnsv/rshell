@@ -57,17 +57,26 @@ impl Completer for ShellHelper {
 
         let ends_with_space = line_up_to_cursor.ends_with(char::is_whitespace);
         let words: Vec<&str> = line_up_to_cursor.split_whitespace().collect();
+
+        if words.is_empty() {
+            return Ok((start_pos, candidates));
+        }
+
         let is_command_position = words.len() <= 1 && !ends_with_space;
 
         if is_command_position {
             collect_command_candidates(suggested_file, &mut candidates);
         } else {
-            let Some(command) = words.get(0) else {
-                return Ok((start_pos, candidates));
-            };
+            let command = words[0];
 
-            if let Some(script_path) = self.completion_specs.borrow().get(*command) {
-                collect_completion_spec_candidates(script_path, suggested_file, &mut candidates);
+            if let Some(script_path) = self.completion_specs.borrow().get(command) {
+                let previous_word: Option<&str>;
+                match words.len() {
+                    3 => previous_word = Some(words[1]),
+                    _ => previous_word = None,
+                }
+
+                collect_completion_spec_candidates(command, script_path, suggested_file, &mut candidates, previous_word);
             } else {
                 collect_path_candidates(suggested_dir, suggested_file, &mut candidates);
             }
@@ -124,8 +133,12 @@ fn collect_command_candidates(suggested_file: &str, candidates: &mut Vec<Pair>) 
     }
 }
 
-fn collect_completion_spec_candidates(script_path: &str, suggested_arg: &str, candidates: &mut Vec<Pair>) {
-    let Ok(output) = Command::new(script_path).output() else {
+fn collect_completion_spec_candidates(command: &str, script_path: &str, suggested_arg: &str, candidates: &mut Vec<Pair>, previous_word: Option<&str>) {
+    let mut cmd = Command::new(script_path);
+    let cmd_args = vec![command, suggested_arg, previous_word.unwrap_or("")];
+    cmd.args(cmd_args);
+
+    let Ok(output) = cmd.output() else {
         return;
     };
     let text = String::from_utf8_lossy(&output.stdout);
