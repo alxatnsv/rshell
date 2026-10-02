@@ -31,7 +31,7 @@ impl Shell {
         }
     }
 
-    pub const BUILTINS: &[&str] = &["echo", "exit", "type", "pwd", "cd", "history", "declare", "complete"];
+    pub const BUILTINS: &[&str] = &["echo", "exit", "type", "pwd", "cd", "history", "declare", "complete", "jobs"];
 
     pub fn get_variables(&self) -> Ref<'_, HashMap<String, String>> {
         self.variables.borrow()
@@ -70,6 +70,8 @@ impl Shell {
             _ => {}
         }
     }
+
+    pub fn builtin_jobs(&self) {}
 
     pub fn builtin_history(&self, args: &[&str], ctx: &IoContext, rl: &mut Editor<ShellHelper, DefaultHistory>) {
         let len = rl.history().len();
