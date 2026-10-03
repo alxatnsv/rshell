@@ -74,10 +74,20 @@ impl Shell {
     }
 
     pub fn builtin_jobs(&self, ctx: &IoContext) {
-        if self.jobs.borrow().is_empty() {
-            return;
+        let jobs = self.jobs.borrow();
+
+        for (idx, job) in jobs.iter().enumerate() {
+            let sign: char;
+            if idx == jobs.len() - 1 {
+                sign = '+';
+            } else if idx == jobs.len() - 2 {
+                sign = '-';
+            } else {
+                sign = ' ';
+            }
+
+            self.output(ctx, &format!("[{}]{sign}  {:<24}{}", job.number, "Running", job.command_line));
         }
-        self.output(ctx, &format!("[1]+ Running                 {}", self.jobs.borrow()[0].command_line));
     }
 
     pub fn builtin_history(&self, args: &[&str], ctx: &IoContext, rl: &mut Editor<ShellHelper, DefaultHistory>) {
