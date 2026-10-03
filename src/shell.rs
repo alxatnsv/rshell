@@ -74,20 +74,40 @@ impl Shell {
     }
 
     pub fn builtin_jobs(&self, ctx: &IoContext) {
-        let jobs = self.jobs.borrow();
+        let mut jobs = self.jobs.borrow_mut();
+        let len = jobs.len();
 
-        for (idx, job) in jobs.iter().enumerate() {
-            let sign: char;
-            if idx == jobs.len() - 1 {
-                sign = '+';
-            } else if idx == jobs.len() - 2 {
-                sign = '-';
+        for (idx, job) in jobs.iter_mut().enumerate() {
+            let sign = if idx + 1 == len {
+                '+'
+            } else if idx + 2 == len {
+                '-'
             } else {
-                sign = ' ';
-            }
+                ' '
+            };
 
-            self.output(ctx, &format!("[{}]{sign}  {:<24}{}", job.number, "Running", job.command_line));
+            let status_str: &str;
+            let command;
+            match job.child.try_wait() {
+                Ok(Some(_)) => {
+                    status_str = "Done";
+                    job.running = false;
+                    command = job.command_line.clone();
+                }
+                Ok(None) => {
+                    status_str = "Running";
+                    command = job.command_line.to_owned() + " &";
+                }
+                Err(_) => {
+                    status_str = "Error";
+                    command = job.command_line.clone();
+                }
+            };
+
+            self.output(ctx, &format!("[{}]{}  {:<24}{}", job.number, sign, status_str, command));
         }
+
+        Vec::retain(&mut jobs, |x| x.running);
     }
 
     pub fn builtin_history(&self, args: &[&str], ctx: &IoContext, rl: &mut Editor<ShellHelper, DefaultHistory>) {
@@ -192,7 +212,7 @@ impl Shell {
 
         if ctx.background {
             if let Ok(child) = cmd.spawn() {
-                let command_line = if args.is_empty() { format!("{command} &") } else { format!("{command} {} &", args.join(" ")) };
+                let command_line = if args.is_empty() { format!("{command}") } else { format!("{command} {}", args.join(" ")) };
                 let job = Job::new(self.jobs.borrow().len() + 1, child, command_line);
                 println!("[{}] {}", job.number, job.child.id());
                 self.jobs.borrow_mut().push(job);
