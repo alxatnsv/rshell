@@ -3,6 +3,7 @@ mod helper;
 mod io_context;
 mod lexer;
 mod shell;
+mod job;
 
 #[allow(unused_imports)]
 use helper::ShellHelper;

@@ -1,4 +1,4 @@
-use crate::{helper::ShellHelper, io_context::IoContext};
+use crate::{helper::ShellHelper, io_context::IoContext, job::Job};
 use is_executable::IsExecutable;
 use rustyline::{
     Editor,
@@ -21,6 +21,7 @@ use std::{
 pub struct Shell {
     history_sync_idx: Cell<usize>,
     variables: RefCell<HashMap<String, String>>,
+    jobs: RefCell<Vec<Job>>,
 }
 
 impl Shell {
@@ -28,6 +29,7 @@ impl Shell {
         Shell {
             history_sync_idx: Cell::new(0),
             variables: RefCell::new(HashMap::new()),
+            jobs: RefCell::new(Vec::new()),
         }
     }
 
@@ -173,8 +175,15 @@ impl Shell {
             }
         }
 
-        if let Err(e) = cmd.status() {
-            eprintln!("Failed to execute command: {e}");
+        if ctx.background {
+            if let Ok(child) = cmd.spawn() {
+                let command_line = if args.is_empty() { format!("{command} &") } else { format!("{command} {} &", args.join(" ")) };
+                let job = Job::new(self.jobs.borrow().len() + 1, child, command_line);
+                println!("[{}] {}", job.number, job.child.id());
+                self.jobs.borrow_mut().push(job);
+            }
+        } else {
+            let _ = cmd.status();
         }
     }
 

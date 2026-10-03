@@ -5,12 +5,22 @@ pub struct IoContext {
     pub stdout_redirect: Option<PathBuf>,
     pub stderr_redirect: Option<PathBuf>,
     pub append: bool,
+    pub background: bool,
 }
 
 impl IoContext {
     const REDIRECT_OPERATORS: &'static [&'static str] = &[">", "1>", "2>", ">>", "1>>", "2>>"];
 
     pub fn parse_context<'a>(args: &[&'a str]) -> (Vec<&'a str>, IoContext) {
+        let background: bool;
+        let mut args = args;
+        if let Some((&"&", remaining_args)) = args.split_last() {
+            background = true;
+            args = remaining_args;
+        } else {
+            background = false;
+        }
+
         if let Some(op_pos) = args.iter().position(|&x| Self::is_redirect_op(x)) {
             if op_pos + 1 < args.len() {
                 let redirect_op = args[op_pos];
@@ -33,6 +43,7 @@ impl IoContext {
                         stdout_redirect,
                         stderr_redirect,
                         append,
+                        background,
                     },
                 );
             }
@@ -44,6 +55,7 @@ impl IoContext {
                 stdout_redirect: None,
                 stderr_redirect: None,
                 append: false,
+                background,
             },
         )
     }
