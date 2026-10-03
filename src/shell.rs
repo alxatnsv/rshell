@@ -107,7 +107,7 @@ impl Shell {
             self.output(ctx, &format!("[{}]{}  {:<24}{}", job.number, sign, status_str, command));
         }
 
-        Vec::retain(&mut jobs, |x| x.running);
+        jobs.retain(|x| x.running);
     }
 
     pub fn builtin_history(&self, args: &[&str], ctx: &IoContext, rl: &mut Editor<ShellHelper, DefaultHistory>) {
@@ -220,6 +220,32 @@ impl Shell {
         } else {
             let _ = cmd.status();
         }
+    }
+
+    pub fn check_jobs(&self) {
+        let mut jobs = self.jobs.borrow_mut();
+
+        for job in jobs.iter_mut() {
+            if job.child.try_wait().is_ok_and(|status| status.is_some()) {
+                job.running = false;
+            }
+        }
+
+        let len = jobs.iter().filter(|x| !x.running).count();
+
+        for (idx, job) in jobs.iter().filter(|x| !x.running).enumerate() {
+            let sign = if idx + 1 == len {
+                '+'
+            } else if idx + 2 == len {
+                '-'
+            } else {
+                ' '
+            };
+
+            println!("[{}]{}  {:<24}{}", job.number, sign, "Done", job.command_line);
+        }
+
+        jobs.retain(|x| x.running);
     }
 
     fn get_home_path(&self) -> PathBuf {

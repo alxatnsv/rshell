@@ -70,6 +70,8 @@ fn main() {
 
             _ => shell.execute(command, &args, &ctx),
         }
+
+        shell.check_jobs();
     }
 }
 
