@@ -73,7 +73,12 @@ impl Shell {
         }
     }
 
-    pub fn builtin_jobs(&self) {}
+    pub fn builtin_jobs(&self, ctx: &IoContext) {
+        if self.jobs.borrow().is_empty() {
+            return;
+        }
+        self.output(ctx, &format!("[1]+ Running                 {}", self.jobs.borrow()[0].command_line));
+    }
 
     pub fn builtin_history(&self, args: &[&str], ctx: &IoContext, rl: &mut Editor<ShellHelper, DefaultHistory>) {
         let len = rl.history().len();

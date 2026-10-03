@@ -57,7 +57,7 @@ fn main() {
             "pwd" => shell.builtin_pwd(&ctx),
             "declare" => shell.builtin_declare(&args, &ctx),
             "history" => shell.builtin_history(&args, &ctx, &mut rl),
-            "jobs" => shell.builtin_jobs(),
+            "jobs" => shell.builtin_jobs(&ctx),
             "complete" => {
                 if let Some(helper_ref) = rl.helper() {
                     shell.builtin_complete(&args, &ctx, helper_ref);
