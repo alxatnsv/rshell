@@ -1,13 +1,14 @@
 mod completion_context;
 mod helper;
 mod io_context;
-mod lexer;
-mod shell;
 mod job;
+mod lexer;
+mod pipeline;
+mod shell;
+mod streams;
 
 #[allow(unused_imports)]
 use helper::ShellHelper;
-use io_context::IoContext;
 use lexer::Lexer;
 use rustyline::{Config, Editor, history::DefaultHistory};
 use shell::Shell;
@@ -44,33 +45,29 @@ fn main() {
             continue;
         }
 
-        let token_refs: Vec<&str> = tokens.iter().map(|s| s.as_str()).collect();
-        let command = token_refs[0];
-
         let _ = rl.add_history_entry(line.as_str());
-        let (args, ctx) = IoContext::parse_context(&&token_refs[1..]);
 
-        match command {
-            "echo" => shell.builtin_echo(&args, &ctx),
-            "type" => shell.builtin_type(&args, &ctx),
-            "cd" => shell.builtin_cd(&args, &ctx),
-            "pwd" => shell.builtin_pwd(&ctx),
-            "declare" => shell.builtin_declare(&args, &ctx),
-            "history" => shell.builtin_history(&args, &ctx, &mut rl),
-            "jobs" => shell.builtin_jobs(&ctx),
-            "complete" => {
-                if let Some(helper_ref) = rl.helper() {
-                    shell.builtin_complete(&args, &ctx, helper_ref);
-                }
-            }
-            "exit" => {
-                save_histfile_env(&rl);
-                break;
-            }
+        let mut token_refs: Vec<&str> = tokens.iter().map(|s| s.as_str()).collect();
 
-            _ => shell.execute(command, &args, &ctx),
+        let background = token_refs.last() == Some(&"&");
+        if background {
+            token_refs.pop();
         }
 
+        let stages = match pipeline::split_pipeline(&token_refs) {
+            Ok(stages) => stages,
+            Err(e) => {
+                eprintln!("syntax error: {:?}", e);
+                continue;
+            }
+        };
+
+        if stages.len() == 1 && stages[0][0] == "exit" {
+            save_histfile_env(&rl);
+            break;
+        }
+
+        shell.run_pipeline(&stages, background, &token_refs.join(" "), &mut rl);
         shell.check_jobs();
     }
 }
