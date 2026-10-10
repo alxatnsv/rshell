@@ -22,17 +22,14 @@ impl IoContext {
                     _ => (None, None),
                 };
 
-                let append = match redirect_op {
-                    ">>" | "1>>" | "2>>" => true,
-                    _ => false,
-                };
+                let append = matches!(redirect_op, ">>" | "1>>" | "2>>");
 
                 return (
                     args[..op_pos].to_vec(),
                     IoContext {
                         stdout_redirect,
                         stderr_redirect,
-                        append
+                        append,
                     },
                 );
             }
@@ -43,7 +40,7 @@ impl IoContext {
             IoContext {
                 stdout_redirect: None,
                 stderr_redirect: None,
-                append: false
+                append: false,
             },
         )
     }

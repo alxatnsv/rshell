@@ -1,6 +1,6 @@
 pub struct CompletionContext<'a> {
-    pub line: &'a str,        // -> COMP_LINE
-    pub pos: usize,           // -> COMP_POINT
+    pub line: &'a str, // -> COMP_LINE
+    pub pos: usize,    // -> COMP_POINT
     pub start_pos: usize,
     pub current_word: &'a str, // full partial word, e.g. "src/Carg"
     pub dir: Option<&'a str>,  // "src"      (path completion only)
@@ -31,7 +31,7 @@ impl<'a> CompletionContext<'a> {
             ends_with_space: before_cursor.ends_with(char::is_whitespace),
         }
     }
-    
+
     pub fn is_command_position(&self) -> bool {
         self.words.len() <= 1 && !self.ends_with_space
     }

@@ -91,7 +91,7 @@ fn collect_command_candidates(suggested_file: &str, candidates: &mut Vec<Pair>) 
                 continue;
             };
 
-            if !file_name.starts_with(&suggested_file) {
+            if !file_name.starts_with(suggested_file) {
                 continue;
             }
             let path_buf = entry.path();

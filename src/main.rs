@@ -7,7 +7,6 @@ mod pipeline;
 mod shell;
 mod streams;
 
-#[allow(unused_imports)]
 use helper::ShellHelper;
 use lexer::Lexer;
 use rustyline::{Config, Editor, history::DefaultHistory};

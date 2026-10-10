@@ -77,9 +77,5 @@ impl Streams {
 }
 
 fn open(path: &Path, append: bool) -> io::Result<File> {
-    if append {
-        OpenOptions::new().create(true).append(true).open(path)
-    } else {
-        File::create(path)
-    }
+    if append { OpenOptions::new().create(true).append(true).open(path) } else { File::create(path) }
 }

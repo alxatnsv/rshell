@@ -1,14 +1,24 @@
-use crate::{helper::ShellHelper, io_context::IoContext, job::Job, streams::{Input, Output, Streams}};
+use crate::{
+    helper::ShellHelper,
+    io_context::IoContext,
+    job::Job,
+    streams::{Input, Output, Streams},
+};
 use is_executable::IsExecutable;
 use rustyline::{
     Editor,
     history::{DefaultHistory, History},
 };
-
-#[allow(unused_imports)]
-use std::io::{self, Write};
+use std::io::Write;
 use std::{
-    cell::{Cell, Ref, RefCell}, collections::HashMap, env, fs::{File, OpenOptions}, io::{PipeReader, pipe}, os::unix::process::CommandExt, path::PathBuf, process::{Child, Command},
+    cell::{Cell, Ref, RefCell},
+    collections::HashMap,
+    env,
+    fs::{File, OpenOptions},
+    io::{PipeReader, pipe},
+    os::unix::process::CommandExt,
+    path::PathBuf,
+    process::{Child, Command},
 };
 
 #[derive(Debug)]
@@ -71,12 +81,7 @@ impl Shell {
         }
 
         if background {
-            if let Some(last_child) = children.pop() {
-                for mut c in children {
-                    let _ = c.wait();
-                }
-                self.add_job(last_child, line.to_string());
-            }
+            self.add_job(children, line.to_string());
         } else {
             for mut child in children {
                 let _ = child.wait();
@@ -121,9 +126,14 @@ impl Shell {
         }
     }
 
-    pub fn add_job(&self, child: Child, command_line: String) {
-        let job = Job::new(self.jobs.borrow().len() + 1, child, command_line);
-        println!("[{}] {}", job.number, job.child.id());
+    pub fn add_job(&self, children: Vec<Child>, command_line: String) {
+        if children.is_empty() {
+            return;
+        }
+        let job = Job::new(self.jobs.borrow().len() + 1, children, command_line);
+        if let Some(pid) = job.last_pid() {
+            println!("[{}] {}", job.number, pid);
+        }
         self.jobs.borrow_mut().push(job);
     }
 
@@ -136,12 +146,12 @@ impl Shell {
     }
 
     pub fn builtin_complete(&self, args: &[&str], io: &mut Streams, helper: &ShellHelper) {
-        let Some(param) = args.get(0) else {
+        let Some(param) = args.first() else {
             return;
         };
 
-        match param {
-            &"-p" => {
+        match *param {
+            "-p" => {
                 if let Some(cmd) = args.get(1) {
                     let compls = helper.get_completion_spec();
                     let Some(path) = compls.get(*cmd) else {
@@ -151,12 +161,12 @@ impl Shell {
                     let _ = writeln!(io.out, "complete -C '{path}' {cmd}");
                 }
             }
-            &"-C" => {
+            "-C" => {
                 if let (Some(path), Some(cmd)) = (args.get(1), args.get(2)) {
                     helper.set_completion_spec(cmd, path);
                 }
             }
-            &"-r" => {
+            "-r" => {
                 if let Some(cmd) = args.get(1) {
                     helper.remove_completion_spec(cmd);
                 }
@@ -178,26 +188,17 @@ impl Shell {
                 ' '
             };
 
-            let status_str: &str;
-            let command;
-            match job.child.try_wait() {
-                Ok(Some(_)) => {
-                    status_str = "Done";
-                    job.running = false;
-                    command = job.command_line.clone();
-                }
-                Ok(None) => {
-                    status_str = "Running";
-                    command = job.command_line.to_owned() + " &";
-                }
-                Err(_) => {
-                    status_str = "Error";
-                    command = job.command_line.clone();
-                }
-            };
-            let _ = writeln!(io.out, "[{}]{}  {:<24}{}", job.number, sign, status_str, command);
-        }
+            let done = job.is_done();
+            job.running = !done;
 
+            let (status, command) = if done {
+                ("Done", job.command_line.clone())
+            } else {
+                ("Running", format!("{} &", job.command_line))
+            };
+
+            let _ = writeln!(io.out, "[{}]{}  {:<24}{}", job.number, sign, status, command);
+        }
         jobs.retain(|x| x.running);
     }
 
@@ -205,13 +206,13 @@ impl Shell {
         let len = rl.history().len();
         let mut limit = len;
 
-        if let Some(input_num) = args.get(0).and_then(|arg| arg.parse::<usize>().ok()) {
+        if let Some(input_num) = args.first().and_then(|arg| arg.parse::<usize>().ok()) {
             limit = input_num.min(len);
         }
 
         if let Some(file_path) = args.get(1).map(PathBuf::from) {
             let action = args[0];
-            self.history_action(&action, &file_path, io, rl);
+            self.history_action(action, &file_path, io, rl);
             return;
         }
 
@@ -223,7 +224,7 @@ impl Shell {
     }
 
     pub fn builtin_declare(&self, args: &[&str], io: &mut Streams) {
-        let Some(param) = args.get(0) else {
+        let Some(param) = args.first() else {
             return;
         };
 
@@ -277,49 +278,16 @@ impl Shell {
 
         let home_path = if arg != "~" { PathBuf::from(arg) } else { self.get_home_path() };
 
-        if let Err(_) = env::set_current_dir(&home_path) {
+        if env::set_current_dir(&home_path).is_err() {
             let _ = writeln!(io.err, "cd: {}: No such file or directory", home_path.display());
         }
     }
-
-    // pub fn execute(&self, command: &str, args: &[&str], ctx: &IoContext) {
-    //     let Some(path_buf) = Shell::locate_executable(command) else {
-    //         self.error(&ctx, &format!("{command}: not found"));
-    //         return;
-    //     };
-
-    //     let mut cmd = Command::new(path_buf);
-    //     cmd.arg0(command).args(args);
-
-    //     if let Some(file_path) = &ctx.stdout_redirect {
-    //         if let Ok(file) = self.open_or_create(ctx.append, file_path) {
-    //             cmd.stdout(file);
-    //         }
-    //     }
-
-    //     if let Some(file_path) = &ctx.stderr_redirect {
-    //         if let Ok(file) = self.open_or_create(ctx.append, file_path) {
-    //             cmd.stderr(file);
-    //         }
-    //     }
-
-    //     if ctx.background {
-    //         if let Ok(child) = cmd.spawn() {
-    //             let command_line = if args.is_empty() { format!("{command}") } else { format!("{command} {}", args.join(" ")) };
-    //             let job = Job::new(self.jobs.borrow().len() + 1, child, command_line);
-    //             println!("[{}] {}", job.number, job.child.id());
-    //             self.jobs.borrow_mut().push(job);
-    //         }
-    //     } else {
-    //         let _ = cmd.status();
-    //     }
-    // }
 
     pub fn check_jobs(&self) {
         let mut jobs = self.jobs.borrow_mut();
 
         for job in jobs.iter_mut() {
-            if job.child.try_wait().is_ok_and(|status| status.is_some()) {
+            if job.running && job.is_done() {
                 job.running = false;
             }
         }
@@ -368,34 +336,6 @@ impl Shell {
         Self::BUILTINS.contains(&cmd)
     }
 
-    // fn output(&self, ctx: &IoContext, args: &str) {
-    //     if let Some(redirect_path) = &ctx.stderr_redirect {
-    //         let _ = File::create(redirect_path);
-    //     }
-
-    //     if let Some(redirect_path) = &ctx.stdout_redirect {
-    //         if let Ok(mut f) = self.open_or_create(ctx.append, redirect_path) {
-    //             let _ = writeln!(f, "{args}");
-    //         }
-    //     } else {
-    //         println!("{args}");
-    //     }
-    // }
-
-    // fn error(&self, ctx: &IoContext, args: &str) {
-    //     if let Some(redirect_path) = &ctx.stdout_redirect {
-    //         let _ = File::create(redirect_path);
-    //     }
-
-    //     if let Some(redirect_path) = &ctx.stderr_redirect {
-    //         if let Ok(mut f) = self.open_or_create(ctx.append, redirect_path) {
-    //             let _ = writeln!(f, "{args}");
-    //         }
-    //     } else {
-    //         eprintln!("{args}");
-    //     }
-    // }
-
     fn open_or_create(&self, append: bool, path: &PathBuf) -> Result<File, std::io::Error> {
         if append { OpenOptions::new().create(true).append(true).open(path) } else { File::create(path) }
     }
@@ -405,20 +345,18 @@ impl Shell {
             "-r" => {
                 let _ = rl.load_history(&file_path);
                 self.history_sync_idx.set(rl.history().len());
-                return;
             }
             "-w" => {
-                if let Ok(mut f) = self.open_or_create(false, &file_path) {
-                    rl.history().iter().for_each(|line| writeln!(f, "{}", line).unwrap());
+                if let Ok(mut f) = self.open_or_create(false, file_path) {
+                    let _ = rl.history().iter().for_each(|line| writeln!(f, "{}", line).unwrap());
                 }
 
                 self.history_sync_idx.set(rl.history().len());
-                return;
             }
             "-a" => {
                 let sync_idx = self.history_sync_idx.get();
                 if sync_idx < rl.history().len() {
-                    if let Ok(mut f) = self.open_or_create(true, &file_path) {
+                    if let Ok(mut f) = self.open_or_create(true, file_path) {
                         for line in rl.history().iter().skip(sync_idx) {
                             writeln!(f, "{}", line).unwrap();
                         }
@@ -426,11 +364,9 @@ impl Shell {
 
                     self.history_sync_idx.set(rl.history().len());
                 }
-                return;
             }
             _ => {
                 let _ = writeln!(io.err, "{action}: invalid option");
-                return;
             }
         }
     }
