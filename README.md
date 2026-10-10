@@ -1,35 +1,74 @@
-[![progress-banner](https://backend.codecrafters.io/progress/shell/8619baec-3b65-496d-af0e-558f7fc0e19c)](https://app.codecrafters.io/users/AlexanderAtanasov06?r=2qF)
+# rshell
 
-This is a starting point for Rust solutions to the
-["Build Your Own Shell" Challenge](https://app.codecrafters.io/courses/shell/overview).
+A POSIX-inspired Unix shell written in Rust.
 
-In this challenge, you'll build your own POSIX compliant shell that's capable of
-interpreting shell commands, running external programs and builtin commands like
-cd, pwd, echo and more. Along the way, you'll learn about shell command parsing,
-REPLs, builtin commands, and more.
+Built as a learning project to explore how shells work under the hood: lexing, pipelines, process management, and interactive line editing.
 
-**Note**: If you're viewing this repo on GitHub, head over to
-[codecrafters.io](https://codecrafters.io) to try the challenge.
+## Features
 
-# Passing the first stage
+- **Command execution**: builtins and executables found via `$PATH`
+- **Pipelines**: chain commands with `|`
+- **Redirection**: `>`, `>>`, `2>`, `2>>` (and `1>`, `1>>`)
+- **Background jobs**: run commands with `&` and track their status
+- **Quoting and escaping**: single quotes, double quotes, and backslash escapes
+- **Variable expansion**: `$VAR` and `${VAR}`
+- **Tab completion**: builtins, `$PATH` commands, files and directories
+- **Programmable completion**: external completion scripts per command, via `COMP_LINE` and `COMP_POINT`
+- **Command history**: loaded from and saved to the file set in `$HISTFILE`
 
-The entry point for your `shell` implementation is in `src/main.rs`. Study and
-uncomment the relevant code, then run the command below to execute the tests on
-our servers:
+## Getting started
+
+### Requirements
+
+- A Unix-like system (Linux or macOS)
+- **Windows users:** use [WSL](https://learn.microsoft.com/windows/wsl/install) (Windows Subsystem for Linux). This project was developed and tested on Windows through WSL, and it does not run natively on Windows.
+- Rust 1.88 or newer ([install Rust](https://rustup.rs)), installed inside WSL if you are on Windows
+
+### Build and run
 
 ```sh
-codecrafters submit
+git clone https://github.com/<your-username>/rshell.git
+cd rshell
+cargo run --release
 ```
 
-Time to move on to the next stage!
+## Usage
 
-# Stage 2 & beyond
+```sh
+$ echo "hello world" | tr a-z A-Z
+HELLO WORLD
+$ ls > files.txt
+$ sleep 5 &
+$ exit
+```
 
-Note: This section is for stages 2 and beyond.
+## Project structure
 
-1. Ensure you have `cargo (1.96)` installed locally
-1. Run `./your_program.sh` to run your program, which is implemented in
-   `src/main.rs`. This command compiles your Rust project, so it might be slow
-   the first time you run it. Subsequent runs will be fast.
-1. Run `codecrafters submit` to submit your solution to CodeCrafters. Test
-   output will be streamed to your terminal.
+| File                    | Purpose                                         |
+| ----------------------- | ----------------------------------------------- |
+| `main.rs`               | REPL loop and history handling                  |
+| `lexer.rs`              | State-machine tokenizer (quotes, escapes, vars) |
+| `pipeline.rs`           | Splits tokens into pipeline stages              |
+| `io_context.rs`         | Parses redirection operators                    |
+| `streams.rs`            | Input/output abstractions for commands          |
+| `job.rs`                | Background job tracking                         |
+| `helper.rs`             | Tab completion via `rustyline`                  |
+| `completion_context.rs` | Parses the cursor position for completion       |
+| `shell.rs`              | Builtins and command execution                  |
+
+## Limitations
+
+This is not a complete POSIX shell. Currently unsupported:
+
+- Special variables such as `$?` and `$$`
+- Command substitution and globbing
+- Control flow (`if`, `for`, `while`) and scripting
+- Redirection inside pipeline stages
+
+## Acknowledgements
+
+Started from the [CodeCrafters "Build Your Own Shell"](https://codecrafters.io/challenges/shell) challenge.
+
+## License
+
+Released under the [MIT License](LICENSE).
