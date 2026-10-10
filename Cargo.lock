@@ -42,6 +42,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "codecrafters-shell"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "is_executable",
+ "rustyline",
+ "thiserror",
+]
+
+[[package]]
 name = "endian-type"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -136,17 +147,6 @@ checksum = "3b4431027dcd37fc2a73ef740b5f233aa805897935b8bce0195e41bbf9a3289a"
 dependencies = [
  "endian-type",
  "nibble_vec",
-]
-
-[[package]]
-name = "rshell"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytes",
- "is_executable",
- "rustyline",
- "thiserror",
 ]
 
 [[package]]
