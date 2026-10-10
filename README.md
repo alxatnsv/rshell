@@ -27,7 +27,7 @@ Built as a learning project to explore how shells work under the hood: lexing, p
 ### Build and run
 
 ```sh
-git clone https://github.com/<your-username>/rshell.git
+git clone https://github.com/alxatnsv/rshell.git
 cd rshell
 cargo run --release
 ```
@@ -68,7 +68,3 @@ This is not a complete POSIX shell. Currently unsupported:
 ## Acknowledgements
 
 Started from the [CodeCrafters "Build Your Own Shell"](https://codecrafters.io/challenges/shell) challenge.
-
-## License
-
-Released under the [MIT License](LICENSE).
