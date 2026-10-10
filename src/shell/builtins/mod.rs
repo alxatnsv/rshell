@@ -1,146 +1,14 @@
-use crate::{
-    helper::ShellHelper,
-    io_context::IoContext,
-    job::Job,
-    streams::{Input, Output, Streams},
-};
-use is_executable::IsExecutable;
+use crate::{helper::ShellHelper, streams::Streams};
 use rustyline::{
     Editor,
     history::{DefaultHistory, History},
 };
 use std::io::Write;
-use std::{
-    cell::{Cell, Ref, RefCell},
-    collections::HashMap,
-    env,
-    fs::{File, OpenOptions},
-    io::{PipeReader, pipe},
-    os::unix::process::CommandExt,
-    path::PathBuf,
-    process::{Child, Command},
-};
+use std::{env, path::PathBuf};
 
-#[derive(Debug)]
-pub struct Shell {
-    history_sync_idx: Cell<usize>,
-    variables: RefCell<HashMap<String, String>>,
-    jobs: RefCell<Vec<Job>>,
-}
+use super::Shell;
 
 impl Shell {
-    pub fn new() -> Self {
-        Shell {
-            history_sync_idx: Cell::new(0),
-            variables: RefCell::new(HashMap::new()),
-            jobs: RefCell::new(Vec::new()),
-        }
-    }
-
-    pub const BUILTINS: &[&str] = &["echo", "exit", "type", "pwd", "cd", "history", "declare", "complete", "jobs"];
-
-    pub fn run_pipeline(&self, stages: &[Vec<&str>], background: bool, line: &str, rl: &mut Editor<ShellHelper, DefaultHistory>) {
-        let last = stages.len() - 1;
-        let mut prev_reader: Option<PipeReader> = None;
-        let mut children: Vec<Child> = Vec::new();
-
-        for (i, stage) in stages.iter().enumerate() {
-            let command = stage[0];
-            let (args, ctx) = IoContext::parse_context(&stage[1..]);
-
-            let mut io = match Streams::from_context(&ctx) {
-                Ok(io) => io,
-                Err(e) => {
-                    eprintln!("{e}");
-                    break;
-                }
-            };
-
-            if let Some(reader) = prev_reader.take() {
-                io.input = Input::Pipe(reader);
-            }
-
-            if i < last {
-                match pipe() {
-                    Ok((reader, writer)) => {
-                        if ctx.stdout_redirect.is_none() {
-                            io.out = Output::Pipe(writer);
-                        }
-                        prev_reader = Some(reader);
-                    }
-                    Err(e) => {
-                        eprintln!("pipe: {e}");
-                        break;
-                    }
-                }
-            }
-
-            if let Some(child) = self.run_stage(command, &args, io, rl) {
-                children.push(child);
-            }
-        }
-
-        if background {
-            self.add_job(children, line.to_string());
-        } else {
-            for mut child in children {
-                let _ = child.wait();
-            }
-        }
-    }
-
-    pub fn run_stage(&self, command: &str, args: &[&str], mut io: Streams, rl: &mut Editor<ShellHelper, DefaultHistory>) -> Option<Child> {
-        match command {
-            "echo" => self.builtin_echo(args, &mut io),
-            "type" => self.builtin_type(args, &mut io),
-            "cd" => self.builtin_cd(args, &mut io),
-            "pwd" => self.builtin_pwd(&mut io),
-            "declare" => self.builtin_declare(args, &mut io),
-            "jobs" => self.builtin_jobs(&mut io),
-            "history" => self.builtin_history(args, &mut io, rl),
-            "complete" => {
-                if let Some(helper) = rl.helper() {
-                    self.builtin_complete(args, &mut io, helper);
-                }
-            }
-            _ => return self.spawn_external(command, args, io),
-        }
-        None
-    }
-
-    fn spawn_external(&self, command: &str, args: &[&str], io: Streams) -> Option<Child> {
-        let Some(path) = Self::locate_executable(command) else {
-            let mut io = io;
-            let _ = writeln!(io.err, "{command}: not found");
-            return None;
-        };
-
-        let result = Command::new(path).arg0(command).args(args).stdin(io.input).stdout(io.out).stderr(io.err).spawn();
-
-        match result {
-            Ok(child) => Some(child),
-            Err(e) => {
-                eprintln!("{command}: {e}");
-                None
-            }
-        }
-    }
-
-    pub fn add_job(&self, children: Vec<Child>, command_line: String) {
-        if children.is_empty() {
-            return;
-        }
-        let job = Job::new(self.jobs.borrow().len() + 1, children, command_line);
-        if let Some(pid) = job.last_pid() {
-            println!("[{}] {}", job.number, pid);
-        }
-        self.jobs.borrow_mut().push(job);
-    }
-
-    pub fn get_variables(&self) -> Ref<'_, HashMap<String, String>> {
-        self.variables.borrow()
-    }
-
     pub fn builtin_echo(&self, args: &[&str], io: &mut Streams) {
         let _ = writeln!(io.out, "{}", args.join(" "));
     }
@@ -283,63 +151,6 @@ impl Shell {
         }
     }
 
-    pub fn check_jobs(&self) {
-        let mut jobs = self.jobs.borrow_mut();
-
-        for job in jobs.iter_mut() {
-            if job.running && job.is_done() {
-                job.running = false;
-            }
-        }
-
-        let len = jobs.iter().filter(|x| !x.running).count();
-
-        for (idx, job) in jobs.iter().filter(|x| !x.running).enumerate() {
-            let sign = if idx + 1 == len {
-                '+'
-            } else if idx + 2 == len {
-                '-'
-            } else {
-                ' '
-            };
-
-            println!("[{}]{}  {:<24}{}", job.number, sign, "Done", job.command_line);
-        }
-
-        jobs.retain(|x| x.running);
-    }
-
-    fn get_home_path(&self) -> PathBuf {
-        let Some(home) = env::var_os("HOME") else {
-            return PathBuf::new();
-        };
-
-        PathBuf::from(home)
-    }
-
-    fn locate_executable(command: &str) -> Option<PathBuf> {
-        let Some(path_var) = env::var_os("PATH") else {
-            return None;
-        };
-
-        for dir in env::split_paths(&path_var) {
-            let candidate = dir.join(command);
-            if candidate.is_file() && candidate.is_executable() {
-                return Some(candidate);
-            }
-        }
-
-        None
-    }
-
-    fn is_builtin(&self, cmd: &str) -> bool {
-        Self::BUILTINS.contains(&cmd)
-    }
-
-    fn open_or_create(&self, append: bool, path: &PathBuf) -> Result<File, std::io::Error> {
-        if append { OpenOptions::new().create(true).append(true).open(path) } else { File::create(path) }
-    }
-
     fn history_action(&self, action: &str, file_path: &PathBuf, io: &mut Streams, rl: &mut Editor<ShellHelper, DefaultHistory>) {
         match action {
             "-r" => {
@@ -371,15 +182,19 @@ impl Shell {
         }
     }
 
-    fn set_variable(&self, key: &str, value: &str) {
-        self.variables.borrow_mut().insert(key.to_string(), value.to_string());
-    }
-
     fn is_valid_var_identifier(&self, name: &str) -> bool {
         let Some((&first, rest)) = name.as_bytes().split_first() else {
             return false;
         };
 
         (first.is_ascii_alphabetic() || first == b'_') && rest.iter().all(|&b| b.is_ascii_alphanumeric() || b == b'_')
+    }
+
+    fn is_builtin(&self, cmd: &str) -> bool {
+        Self::BUILTINS.contains(&cmd)
+    }
+
+    fn set_variable(&self, key: &str, value: &str) {
+        self.variables.borrow_mut().insert(key.to_string(), value.to_string());
     }
 }
