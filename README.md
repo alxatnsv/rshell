@@ -54,16 +54,19 @@ $ exit
 | `job.rs`                | Background job tracking                         |
 | `helper.rs`             | Tab completion via `rustyline`                  |
 | `completion_context.rs` | Parses the cursor position for completion       |
-| `shell.rs`              | Builtins and command execution                  |
+| `shell/`                | Builtins, command execution, and job handling   |
 
 ## Limitations
 
 This is not a complete POSIX shell. Currently unsupported:
 
-- Special variables such as `$?` and `$$`
-- Command substitution and globbing
-- Control flow (`if`, `for`, `while`) and scripting
-- Redirection inside pipeline stages
+- Special variables such as `$?`, `$$`, and positional parameters
+- Variable assignment with `NAME=value` and `export`; variables are set with `declare` and are not passed to child processes
+- Command substitution (`$(...)`, backticks) and globbing
+- Command chaining (`;`, `&&`, `||`), control flow (`if`, `for`, `while`), and scripting
+- Input redirection (`<`), several redirections on one command (`cmd > out 2> err`), and `2>&1`
+- Tilde expansion beyond a bare `~` in `cd`
+- Job control beyond `jobs` (no `fg`, `bg`, or `kill`)
 
 ## Acknowledgements
 

@@ -1,10 +1,10 @@
 pub struct CompletionContext<'a> {
-    pub line: &'a str, // -> COMP_LINE
-    pub pos: usize,    // -> COMP_POINT
+    pub line: &'a str,
+    pub pos: usize,   
     pub start_pos: usize,
-    pub current_word: &'a str, // full partial word, e.g. "src/Carg"
-    pub dir: Option<&'a str>,  // "src"      (path completion only)
-    pub file: &'a str,         // "Carg"     (path / command completion only)
+    pub current_word: &'a str,
+    pub dir: Option<&'a str>,
+    pub file: &'a str,
     pub words: Vec<&'a str>,
     pub ends_with_space: bool,
 }
@@ -41,7 +41,6 @@ impl<'a> CompletionContext<'a> {
     }
 
     pub fn previous_word(&self) -> Option<&str> {
-        // word before the one being completed
         let n = self.words.len();
         if self.ends_with_space {
             self.words.last().copied()
